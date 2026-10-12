@@ -126,7 +126,7 @@
           {app.t("No addresses yet. Add one below.")}
         </p>{/each}
     </div>
-    <div class="border-t pt-3">
+    <div class="grid gap-2 border-t pt-3">
       <Label for={`${prefix}-probe`}>{app.t("Ping target (literal IP)")}</Label>
       <div class="mt-2 flex flex-wrap gap-2">
         <Input

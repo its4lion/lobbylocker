@@ -5,10 +5,10 @@
   let { app }: { app: Backend } = $props();
 </script>
 
-<div class="page-heading">
+<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
   <div>
     <h1>{app.t("Connections")}</h1>
-    <p>
+    <p class="mt-2 text-[13px] text-muted-foreground">
       {app.t(
         "Inspect current remote connections. No capture driver, no background scanning.",
       )}
@@ -18,7 +18,9 @@
     ><ScanLine />{app.t("Scan connections")}</Button
   >
 </div>
-<p class="notice">
+<p
+  class="mb-[22px] rounded-md border bg-muted p-[12px_15px] text-xs leading-[1.8] text-muted-foreground"
+>
   {app.t("Connections are not verified game servers. This view is read-only.")}
 </p>
 <div class="overflow-x-auto rounded-lg border">
@@ -38,7 +40,7 @@
             dir="auto">{connection.process}</td
           ><td class="p-3">{connection.state}</td></tr
         >{:else}<tr
-          ><td colspan="4" class="empty"
+          ><td colspan="4" class="p-5 py-10 text-center text-muted-foreground"
             >{app.t(
               "Click Scan connections to inspect active connections.",
             )}</td

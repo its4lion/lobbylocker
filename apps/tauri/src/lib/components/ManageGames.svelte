@@ -40,7 +40,7 @@
 </script>
 
 <section aria-label={app.t("Manage games")}>
-  <div class="page-heading">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
     <div>
       <h1>
         {app.t(
@@ -49,7 +49,9 @@
             : "Choose games",
         )}
       </h1>
-      <p>{app.t("Choose the games you want in your sidebar.")}</p>
+      <p class="mt-2 text-[13px] text-muted-foreground">
+        {app.t("Choose the games you want in your sidebar.")}
+      </p>
     </div>
     <Button variant="outline" disabled={app.busy} onclick={() => app.scan()}
       ><ScanLine />{app.t(
@@ -88,7 +90,7 @@
         />
         <label
           for={`choose-${game.id}`}
-          class="game-choice-label flex min-w-0 flex-1 cursor-pointer items-center gap-3"
+          class="mb-0 flex min-w-0 flex-1 cursor-pointer items-center gap-3"
           ><GameArtwork {app} id={game.id} /><span class="min-w-0 flex-1"
             ><span
               class="block truncate text-[13px] font-medium"
@@ -119,7 +121,7 @@
     )}
   </p>
   <div
-    class="sticky bottom-0 mt-6 flex flex-wrap justify-end gap-3 border-t bg-background py-4"
+    class="sticky bottom-0 mt-6 flex flex-wrap justify-end gap-3 border-t py-4"
   >
     <Button variant="outline" disabled={app.busy} onclick={oncancel}
       >{app.t("Cancel")}</Button

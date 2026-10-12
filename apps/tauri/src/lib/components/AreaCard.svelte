@@ -82,7 +82,7 @@
       <div class="space-y-4">
         <div class="flex items-center gap-3">
           <div class="h-px min-w-8 flex-1 bg-border"></div>
-          <TargetForm {app} {game} {area} collapsible />
+          <TargetForm {app} {game} {area} />
         </div>
         <div class="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
           {#each regions as region (region.id)}<ServerDetails

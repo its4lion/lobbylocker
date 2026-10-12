@@ -49,10 +49,10 @@
   {@const game = app.game}
   {@const refreshable = ["overwatch2", "cs2", "deadlock"].includes(game.id)}
   {@const hasTargets = game.regions.some((region) => region.endpoints.length)}
-  <div class="page-heading">
+  <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
     <div>
       <h1 dir="auto">{game.name}</h1>
-      <p>
+      <p class="mt-2 text-[13px] text-muted-foreground">
         {app.t(
           "Choose which regions to block. Changes take effect after Apply.",
         )}
@@ -182,8 +182,8 @@
   </Dialog.Root>
   <div
     id={regionPanel}
-    class="area-grid"
-    class:advanced
+    class="grid items-start gap-4 grid-cols-[repeat(auto-fill,minmax(230px,1fr))]"
+    class:grid-cols-[minmax(0,1fr)]={advanced}
     data-view={advanced ? "advanced" : "basic"}
   >
     {#each gameAreas(game) as area (`${game.id}:${area}`)}<AreaCard
@@ -193,13 +193,15 @@
         {advanced}
       />{/each}
   </div>
-  {#if !game.regions.length}<div class="max-w-2xl">
-      <p class="mb-4 text-sm text-muted-foreground">
+  {#if !game.regions.length}<div>
+      <p class="mx-auto mb-4 max-w-2xl text-sm text-muted-foreground">
         {app.t(
           "Add your first server IP. Saving selections does not change existing firewall rules; use Apply when ready.",
         )}
       </p>
-      <TargetForm {app} {game} area="Custom" />
+      <div class="flex justify-center">
+        <TargetForm {app} {game} area="Custom" />
+      </div>
     </div>{/if}
 {:else}<div class="flex min-h-80 items-center justify-center text-center">
     <div>

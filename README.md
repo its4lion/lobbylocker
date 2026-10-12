@@ -53,7 +53,7 @@ through their package files or package manager.
 
 1. Open LobbyLocker and choose a detected game or add a custom game.
 2. Select the regions you do **not** want to use.
-3. Click **Apply** and approve the operating-system permission prompt.
+3. Approve the operating-system permission prompt.
 
 Rules stay active after LobbyLocker closes. Use **Settings → Reset** to remove
 all LobbyLocker rules.
@@ -71,9 +71,21 @@ all LobbyLocker rules.
   Use a custom game—not the Overwatch practice range—when testing blocking.
 - There are no anti-cheat, matchmaking-region, or ranked-match guarantees.
 
-AppImages do not have an uninstaller. Run **Settings → Reset** before deleting
-one. The Windows, Ubuntu, and Arch uninstallers attempt to remove LobbyLocker
-rules before removing the application.
+## Uninstalling
+
+The Windows uninstaller and Ubuntu/Arch package removal automatically reset
+LobbyLocker-owned firewall rules **before** removing the application. If cleanup
+fails or cannot be confirmed, removal stops so the cleanup tool remains available.
+Normal updates keep the applied rules. Unrelated firewall rules are never removed.
+
+**AppImages cannot run cleanup when their file is deleted**, including removal by
+Shelly. Use **Settings → Reset**, wait for a successful confirmation, then close
+LobbyLocker and remove the AppImage. For automatic cleanup on uninstall, use the
+Ubuntu or Arch package instead.
+
+Saved preferences and custom game files are kept for reinstalling. Deleting app
+files directly, forcing removal, or disabling package hooks bypasses automatic
+firewall cleanup.
 
 ## Games and server data
 
@@ -104,6 +116,10 @@ If the UI cannot open, an installed binary can remove owned rules with:
 ```sh
 lobbylocker --reset-firewall
 ```
+
+On Linux this command needs root privileges (`sudo lobbylocker --reset-firewall`
+for a native package, or `pkexec ./LobbyLocker.AppImage --reset-firewall` using
+your actual AppImage path). Windows requests administrator approval.
 
 ## Development
 

@@ -65,10 +65,10 @@
   }
 </script>
 
-<div class="page-heading">
+<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
   <div>
     <h1>{app.t("Add custom game")}</h1>
-    <p>
+    <p class="mt-2 text-[13px] text-muted-foreground">
       {app.t(
         "Add the server IPs for this game. Saving does not apply firewall rules.",
       )}
@@ -82,7 +82,7 @@
         alt=""
         class="size-14 rounded-lg object-contain"
       />{/if}
-    <div>
+    <div class="grid gap-2">
       <Label for="game-executable">{app.t("Game executable")}</Label>
       <div class="flex gap-2">
         <Input
@@ -97,7 +97,7 @@
         >
       </div>
     </div>
-    <div>
+    <div class="grid gap-2">
       <Label for="game-name">{app.t("Game name")}</Label><Input
         id="game-name"
         required
@@ -105,7 +105,7 @@
         bind:value={name}
       />
     </div>
-    <div>
+    <div class="grid gap-2">
       <Label for="game-address">{app.t("Server IP or subnet")}</Label><Input
         id="game-address"
         required
@@ -114,7 +114,7 @@
         placeholder="203.0.113.8 / 2001:db8::/64"
       />
     </div>
-    <div>
+    <div class="grid gap-2">
       <Label for="game-area">{app.t("Region")}</Label><ChoiceSelect
         id="game-area"
         bind:value={area}
@@ -126,7 +126,7 @@
       ><Collapsible.Trigger class="text-sm text-muted-foreground"
         >{app.t("Advanced · protocol and port")}</Collapsible.Trigger
       ><Collapsible.Content class="mt-3 grid grid-cols-2 gap-3">
-        <div>
+        <div class="grid gap-2">
           <Label for="game-protocol">{app.t("Protocol")}</Label><ChoiceSelect
             id="game-protocol"
             bind:value={protocol}
@@ -138,7 +138,7 @@
             ]}
           />
         </div>
-        <div>
+        <div class="grid gap-2">
           <Label for="game-ports">{app.t("Port / range")}</Label><Input
             id="game-ports"
             dir="ltr"

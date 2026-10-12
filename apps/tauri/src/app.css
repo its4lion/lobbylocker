@@ -1,3 +1,5 @@
+/* Document-level defaults only. Layout and widgets are Tailwind utilities in the
+   components; `@lobbylocker/ui/styles.css` holds the shared base layer. */
 @import "@lobbylocker/ui/styles.css";
 
 html,
@@ -10,17 +12,13 @@ body {
   margin: 0;
   font-size: 14px;
 }
-button,
-input {
-  font: inherit;
-}
 button:not(:disabled),
 summary {
   cursor: pointer;
 }
-label {
-  display: block;
-  margin-bottom: 7px;
+summary {
+  font-size: 12px;
+  color: var(--muted-foreground);
 }
 code {
   font-family: Consolas, monospace;
@@ -30,183 +28,7 @@ code {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-small,
-summary {
-  font-size: 12px;
-  color: var(--muted-foreground);
-}
-.app-shell {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  height: 100dvh;
-  gap: 0;
-  overflow: hidden;
-}
-.topbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-}
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 285px;
-  direction: ltr;
-  min-height: 0;
-  overflow: hidden;
-}
-.main-panel {
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.content {
-  padding: 28px;
-  width: 100%;
-  max-width: 1400px;
-  margin-inline: auto;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.library-panel {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.game-library {
-  border-left: 1px solid var(--border);
-  padding: 24px 16px;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 100%;
-}
-.library-about {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  width: 100%;
-  margin-top: 16px;
-  padding: 12px;
-  border-top: 1px solid var(--border);
-  color: var(--muted-foreground);
-  font-size: 11px;
-  text-align: start;
-  transition: color 120ms ease;
-}
-.library-about:hover,
-.library-about:focus-visible {
-  color: var(--foreground);
-}
-.game-choice-label {
-  /* Global label defaults must not override Tailwind's layered flex utility. */
-  display: flex;
-  margin-bottom: 0;
-}
-.library-game {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  border-radius: var(--radius-md);
-  padding: 12px;
-  text-align: start;
-  color: var(--muted-foreground);
-}
-.library-game:hover,
-.library-game.active {
-  background: var(--secondary);
-  color: var(--foreground);
-}
-.game-letter {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  background: var(--muted);
-}
-.page-heading {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-}
 h1 {
   font-size: 24px;
   font-weight: 600;
-}
-.page-heading p {
-  color: var(--muted-foreground);
-  font-size: 13px;
-  margin-top: 8px;
-}
-.notice {
-  border: 1px solid var(--border);
-  background: var(--muted);
-  padding: 12px 15px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  line-height: 1.8;
-  color: var(--muted-foreground);
-  margin-bottom: 22px;
-}
-.area-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 16px;
-  align-items: start;
-}
-.area-grid.advanced {
-  grid-template-columns: minmax(0, 1fr);
-}
-.empty {
-  padding: 40px 20px;
-  text-align: center;
-  color: var(--muted-foreground);
-}
-.footerbar {
-  flex-shrink: 0;
-  padding: 12px 28px;
-  background: var(--background);
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-}
-.footerbar p {
-  font-size: 12px;
-  color: var(--muted-foreground);
-}
-@media (max-width: 1000px) {
-  .workspace {
-    grid-template-columns: minmax(0, 1fr) 250px;
-  }
-  .content {
-    padding: 20px;
-  }
-}
-@media (max-width: 759px) {
-  .workspace {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
-  }
-  .game-library {
-    border-left: 0;
-    border-top: 1px solid var(--border);
-  }
 }

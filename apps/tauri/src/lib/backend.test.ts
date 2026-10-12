@@ -399,6 +399,49 @@ describe("native bridge", () => {
     expect(app.firewallFeedback).toBe("error");
     expect(app.error).toContain("Only part");
   });
+  it.each(["apply_rules", "reset_rules"])(
+    "%s shows one plain-language readback alert and keeps operation details without retrying automatically",
+    async (command) => {
+      const loaded = status();
+      loaded.snapshot.platform = "windows";
+      loaded.verification = "unverified";
+      loaded.verificationError =
+        'Could not parse address reported by Windows ("64.224.26.0/255.0.255.0"): Invalid mask.';
+      loaded.snapshot.preferences.blockedRegions = ["overwatch2:blizzard-ams1"];
+      const error = `Firewall operation completed, but its active rules could not be read: ${loaded.verificationError}`;
+      native.invoke.mockImplementation(async (name: string) => {
+        if (name === command) throw Error(error);
+        if (name === "get_status") return loaded;
+      });
+      const app = new Backend();
+      expect(await app.command(command)).toBe(false);
+      expect(app.error).toBe("");
+      expect(app.firewallError).toContain(error);
+      expect(app.firewallFeedback).toBe("error");
+      expect(app.status?.verification).toBe("unverified");
+      expect(app.status?.appliedCount).toBeNull();
+      expect(app.status?.snapshot.preferences.blockedRegions).toEqual([
+        "overwatch2:blizzard-ams1",
+      ]);
+      expect(native.invoke.mock.calls.map(([name]) => name)).toEqual([
+        command,
+        "get_status",
+      ]);
+    },
+  );
+  it("keeps a distinct mutation failure visible when readback also fails", async () => {
+    const loaded = status();
+    loaded.verificationError = "Readback failed";
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "apply_rules") throw Error("Update failed");
+      if (command === "get_status") return loaded;
+    });
+    const app = new Backend();
+    expect(await app.command("apply_rules")).toBe(false);
+    expect(app.error).toContain("Update failed");
+    expect(app.firewallError).toBe("Readback failed");
+    expect(app.firewallFeedback).toBe("error");
+  });
   it("keeps an empty scan empty and clears the discovery busy state after errors", async () => {
     const app = new Backend();
     await app.initialize();
@@ -678,5 +721,199 @@ describe("native bridge", () => {
     await app.initialize();
     expect(app.error).toContain("pnpm dev");
     expect(native.invoke).not.toHaveBeenCalled();
+  });
+});
+
+describe("background server data", () => {
+  it("refreshes an opened game once, silently, and never blocks the UI", async () => {
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return status();
+      if (command === "get_languages") return { locales: [], warnings: [] };
+      if (command === "verify_firewall") return emptyRead();
+      if (command === "scan_games") return { games: [], warnings: [] };
+      if (command === "ensure_fresh_data") return undefined;
+      return undefined;
+    });
+    const app = new Backend();
+    await app.initialize();
+
+    const fresh = native.invoke.mock.calls.filter(
+      (call) => call[0] === "ensure_fresh_data",
+    );
+    // Startup must not prefetch every game.
+    expect(fresh).toHaveLength(0);
+
+    await app.ensureFreshData("cs2");
+    await app.ensureFreshData("cs2");
+    await app.ensureFreshData("");
+    expect(
+      native.invoke.mock.calls.filter(
+        (call) => call[0] === "ensure_fresh_data",
+      ),
+    ).toEqual([["ensure_fresh_data", { gameId: "cs2" }]]);
+    // Never sets the shared busy flag, so Apply stays available.
+    expect(app.busy).toBe(false);
+    expect(app.error).toBe("");
+  });
+
+  it("stays silent when the refresh fails or runs outside the app", async () => {
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "ensure_fresh_data")
+        throw new Error("network is unreachable");
+      return undefined;
+    });
+    const app = new Backend();
+    await expect(app.ensureFreshData("cs2")).resolves.toBeUndefined();
+    expect(app.error).toBe("");
+    expect(app.busy).toBe(false);
+
+    native.isTauri.mockReturnValue(false);
+    const browser = new Backend();
+    await browser.ensureFreshData("cs2");
+    expect(
+      native.invoke.mock.calls.filter(
+        (call) => call[0] === "ensure_fresh_data",
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+describe("immediate firewall writes", () => {
+  function blocked(): Status {
+    const loaded = emptyRead();
+    loaded.dirty = true;
+    loaded.snapshot.preferences.blockedRegions = [
+      "overwatch2:gcp-europe-north1",
+    ];
+    return loaded;
+  }
+
+  it("writes as soon as a toggle is saved, with no waiting", async () => {
+    const loaded = blocked();
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return loaded;
+      if (command === "verify_firewall") return emptyRead();
+      if (command === "apply_rules") {
+        loaded.dirty = false;
+        return undefined;
+      }
+      return undefined;
+    });
+    const app = new Backend();
+    app.status = loaded;
+
+    await app.preferences((p) =>
+      p.blockedRegions.push("deadlock:gcp-europe-north1"),
+    );
+    await vi.waitFor(() =>
+      expect(
+        native.invoke.mock.calls.filter((call) => call[0] === "apply_rules"),
+      ).toHaveLength(1),
+    );
+    // The write runs to completion before the guard is released.
+    await vi.waitFor(() => expect(app.busy).toBe(false));
+    expect(loaded.dirty).toBe(false);
+    expect(app.error).toBe("");
+  });
+
+  it("writes nothing when the change did not touch blocking selections", async () => {
+    const loaded = blocked();
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return loaded;
+      return undefined;
+    });
+    const app = new Backend();
+    app.status = loaded;
+
+    await app.preferences((p) => (p.language = "ar"));
+    await vi.waitFor(() =>
+      expect(native.invoke.mock.calls.length).toBeGreaterThan(0),
+    );
+    expect(
+      native.invoke.mock.calls.filter((call) => call[0] === "apply_rules"),
+    ).toHaveLength(0);
+  });
+
+  it("never writes for a game that still needs an executable", async () => {
+    const loaded = blocked();
+    loaded.snapshot.platform = "windows";
+    loaded.snapshot.games = [
+      {
+        schemaVersion: 1,
+        id: "overwatch2",
+        name: "Overwatch 2",
+        accent: "#f7941d",
+        source: null,
+        updatedAt: null,
+        note: "",
+        regions: [
+          {
+            id: "gcp-europe-north1",
+            name: "Europe",
+            area: "Europe",
+            probeTarget: null,
+            endpoints: [
+              {
+                id: "e1",
+                address: "203.0.113.8",
+                protocol: "udp",
+                ports: null,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return loaded;
+      if (command === "apply_rules") return undefined;
+      return undefined;
+    });
+    const app = new Backend();
+    app.status = loaded;
+    await app.preferences((p) =>
+      p.blockedRegions.push("cs2:gcp-europe-north1"),
+    );
+    await vi.waitFor(() =>
+      expect(
+        native.invoke.mock.calls.filter(
+          (call) => call[0] === "set_preferences",
+        ),
+      ).toHaveLength(1),
+    );
+    expect(
+      native.invoke.mock.calls.filter((call) => call[0] === "apply_rules"),
+    ).toHaveLength(0);
+    // The selection stays pending rather than being silently written.
+    expect(loaded.dirty).toBe(true);
+  });
+
+  it("does not write while another operation holds the guard", async () => {
+    const loaded = blocked();
+    let release!: () => void;
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return loaded;
+      if (command === "verify_firewall")
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      if (command === "apply_rules") return undefined;
+      return undefined;
+    });
+    const app = new Backend();
+    app.status = loaded;
+    const reading = app.command("verify_firewall", { elevated: false });
+    await vi.waitFor(() => expect(app.busy).toBe(true));
+
+    // Switches are disabled while busy, so a toggle cannot land mid-operation.
+    await expect(
+      app.preferences((p) => p.blockedRegions.push("cs2:gcp-europe-north1")),
+    ).resolves.toBe(false);
+    release();
+    await reading;
+    expect(
+      native.invoke.mock.calls.filter((call) => call[0] === "apply_rules"),
+    ).toHaveLength(0);
   });
 });

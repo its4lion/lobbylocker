@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Button, buttonVariants } from "@lobbylocker/ui/components/button";
   import { Input } from "@lobbylocker/ui/components/input";
-  import * as DropdownMenu from "@lobbylocker/ui/components/dropdown-menu";
-  import { Search, Plus, Gamepad2, FolderOpen, File } from "@lucide/svelte";
+  import { Search, Plus, Gamepad2 } from "@lucide/svelte";
   import GameArtwork from "./GameArtwork.svelte";
   import GameBlockBadge from "./GameBlockBadge.svelte";
   import type { Backend } from "$lib/backend.svelte";
@@ -11,8 +10,6 @@
     version,
     managing = false,
     onmanage,
-    onfolder,
-    onexecutable,
     onselect,
     onabout,
   }: {
@@ -20,8 +17,6 @@
     version: string;
     managing?: boolean;
     onmanage: () => void;
-    onfolder: () => void;
-    onexecutable: () => void;
     onselect: (id: string) => void;
     onabout: () => void;
   } = $props();
@@ -34,7 +29,10 @@
   );
 </script>
 
-<aside class="game-library" aria-label={app.t("Game library")}>
+<aside
+  class="flex min-h-full min-w-0 flex-col border-s px-4 py-6 max-[759px]:border-s-0 max-[759px]:border-t"
+  aria-label={app.t("Game library")}
+>
   <h2 class="font-semibold">{app.t("Games")}</h2>
   <div class="mt-5 flex gap-2">
     <div class="relative min-w-0 flex-1">
@@ -47,37 +45,20 @@
         bind:value={query}
       />
     </div>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger
-        class={buttonVariants({ variant: "outline", size: "icon" })}
-        disabled={app.busy || !app.status}
-        aria-label={app.t("Add a game")}
-        ><Plus class="size-4" /></DropdownMenu.Trigger
-      >
-      <DropdownMenu.Content align="end">
-        <DropdownMenu.Item onSelect={onfolder}
-          ><FolderOpen />{app.t("Add library folder")}</DropdownMenu.Item
-        >
-        <DropdownMenu.Item onSelect={onexecutable}
-          ><File />{app.t("Choose executable")}</DropdownMenu.Item
-        >
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+    <Button
+      class={buttonVariants({ variant: "outline", size: "icon" })}
+      disabled={app.busy || !app.status || managing}
+      aria-label={app.t("Manage games")}
+      onclick={onmanage}><Plus class="size-4" /></Button
+    >
   </div>
   {#if games.length}
-    <Button
-      variant="ghost"
-      size="sm"
-      class="my-3 w-full text-muted-foreground"
-      disabled={app.busy || managing}
-      onclick={onmanage}>{app.t("Manage games")}</Button
-    >
-    <div class="flex-1 space-y-1">
+    <div class="mt-3 flex-1 space-y-1">
       {#each visible as game (game.id)}
         <button
           type="button"
-          class="library-game"
-          class:active={game.id === app.selected}
+          class="flex w-full items-center gap-3 rounded-md p-3 text-start text-muted-foreground hover:bg-secondary hover:text-foreground data-[active=true]:bg-secondary data-[active=true]:text-foreground"
+          data-active={game.id === app.selected}
           disabled={app.busy}
           aria-pressed={game.id === app.selected}
           onclick={() => onselect(game.id)}
@@ -112,7 +93,11 @@
       >
     </div>
   {/if}
-  <button type="button" class="library-about" onclick={onabout}>
+  <button
+    type="button"
+    class="mt-4 flex w-full flex-col items-start gap-[3px] border-t p-3 text-start text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground"
+    onclick={onabout}
+  >
     <span class="font-medium" dir="ltr">LobbyLocker v{version}</span>
     <span>{app.t("Created by")} <b dir="ltr">its4lion</b></span>
   </button>

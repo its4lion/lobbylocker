@@ -6,9 +6,10 @@
   import { scopeWarning, missingPrograms } from "$lib/firewall";
   import * as Tabs from "@lobbylocker/ui/components/tabs";
   import * as AlertDialog from "@lobbylocker/ui/components/alert-dialog";
+  import * as Dialog from "@lobbylocker/ui/components/dialog";
   import { Button } from "@lobbylocker/ui/components/button";
   import { ChoiceSelect } from "@lobbylocker/ui/components/choice-select";
-  import { Gamepad2, Check, LoaderCircle, Moon, Sun } from "@lucide/svelte";
+  import { Gamepad2, Moon, Sun } from "@lucide/svelte";
   import GameLibrary from "$lib/components/GameLibrary.svelte";
   import ManageGames from "$lib/components/ManageGames.svelte";
   import CustomGame from "$lib/components/CustomGame.svelte";
@@ -19,10 +20,11 @@
   const app = new Backend();
   const version = packageInfo.version;
   let page = $state("Regions");
-  let view = $state<"main" | "manage" | "custom">("main");
+  let view = $state<"main" | "custom">("main");
   let customPath = $state("");
   let content = $state<HTMLDivElement | null>(null);
   let confirmOpen = $state(false);
+  let manageOpen = $state(false);
   let aboutOpen = $state(false);
   let dark = $state(true);
   const pages = ["Regions", "Connections", "Settings"];
@@ -30,9 +32,6 @@
   const bar = $derived(actionBar(app.status, app.busy));
   const review = $derived(applyReview(app.status));
   const missing = $derived(missingPrograms(app.status));
-  const footerId = $props.id();
-  const applySummary = `${footerId}-summary`;
-  const applyWarning = `${footerId}-warning`;
   const feedback = $derived(
     app.firewallAction
       ? app.firewallSlow
@@ -55,12 +54,12 @@
                   ? app.status?.verification === "different"
                     ? "apply_review_different"
                     : "apply_review"
-                  : "Apply will remove all LobbyLocker blocks."
+                  : "apply_review_empty"
                 : bar.key,
   );
   onMount(() => {
     void app.initialize().then(() => {
-      if (app.status && !app.games.length) view = "manage";
+      if (app.status && !app.games.length) manageOpen = true;
     });
   });
   $effect(() => {
@@ -74,9 +73,16 @@
     app.selected;
     content?.scrollTo({ top: 0 });
   });
+  // Opening a game page refreshes its official server data in the background,
+  // so the user never needs the refresh button.
+  $effect(() => {
+    const id = app.selected;
+    if (view === "main" && page === "Regions" && id)
+      void app.ensureFreshData(id);
+  });
   function manage() {
     app.error = "";
-    view = "manage";
+    manageOpen = true;
   }
   async function addFolder() {
     if (await app.addLibrary()) manage();
@@ -84,6 +90,7 @@
   async function addExecutable() {
     const path = await app.pickExecutable();
     if (path) {
+      manageOpen = false;
       customPath = path;
       view = "custom";
     }
@@ -94,9 +101,6 @@
     page = "Regions";
     app.error = "";
   }
-  async function apply() {
-    if (!(await app.command("apply_rules"))) content?.scrollTo({ top: 0 });
-  }
   async function reset() {
     confirmOpen = false;
     if (!(await app.command("reset_rules"))) content?.scrollTo({ top: 0 });
@@ -106,10 +110,12 @@
 <Tabs.Root
   bind:value={page}
   dir={direction}
-  class="app-shell"
+  class="grid h-dvh grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
   onValueChange={() => (view = "main")}
 >
-  <header class="topbar">
+  <header
+    class="flex flex-wrap items-center justify-between gap-4 border-b px-6 py-4"
+  >
     <div class="flex items-center gap-2 font-semibold">
       <Gamepad2 class="size-5" /><span dir="ltr">LobbyLocker</span>
     </div>
@@ -140,11 +146,13 @@
       >
     </div>
   </header>
-  <div class="workspace">
-    <main class="main-panel" dir={direction}>
+  <div
+    class="grid min-h-0 grid-cols-[minmax(0,1fr)_285px] overflow-hidden [direction:ltr] max-[1000px]:grid-cols-[minmax(0,1fr)_250px] max-[759px]:grid-cols-1 max-[759px]:grid-rows-[minmax(0,3fr)_minmax(0,2fr)]"
+  >
+    <main class="flex min-h-0 min-w-0 flex-col overflow-hidden" dir={direction}>
       <!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard users must be able to focus and scroll this region.) -->
       <div
-        class="content"
+        class="mx-auto w-full max-w-[1400px] flex-1 min-h-0 overflow-auto overscroll-contain p-7 max-[1000px]:p-5"
         bind:this={content}
         aria-busy={app.busy}
         role="region"
@@ -165,7 +173,7 @@
           >
             <p class="text-destructive">
               {app.t(
-                "Could not read firewall status. Existing blocks have not been changed by this check.",
+                "Could not verify firewall status. Retry to check which blocks are active.",
               )}
             </p>
             <details class="mt-2 text-xs text-muted-foreground">
@@ -181,14 +189,7 @@
             >
           </div>{/if}
         {#if app.status}
-          {#if view === "manage"}<ManageGames
-              {app}
-              ondone={() => showGame()}
-              oncancel={() => (view = "main")}
-              onfolder={addFolder}
-              onexecutable={addExecutable}
-            />
-          {:else if view === "custom"}{#key customPath}<CustomGame
+          {#if view === "custom"}{#key customPath}<CustomGame
                 {app}
                 path={customPath}
                 ondone={() => showGame()}
@@ -209,18 +210,21 @@
               /></Tabs.Content
             >
           {/if}
-        {:else if app.busy}<p class="empty" role="status">
+        {:else if app.busy}<p
+            class="p-5 py-10 text-center text-muted-foreground"
+            role="status"
+          >
             {app.t("Working…")}
           </p>{:else}<Button variant="outline" onclick={() => app.initialize()}
             >{app.t("Retry")}</Button
           >{/if}
       </div>
       {#if bar.visible || app.firewallAction || app.firewallFeedback}<footer
-          class="footerbar"
+          class="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t bg-background px-7 py-3"
         >
           <div class="min-w-0 flex-1">
             <p
-              id={applySummary}
+              class="text-xs text-muted-foreground"
               role={app.firewallFeedback === "error" ? "alert" : "status"}
               title={review.games.join(", ")}
             >
@@ -231,7 +235,6 @@
               })}
             </p>
             {#if bar.apply || app.firewallAction === "apply"}<p
-                id={applyWarning}
                 class="mt-1 max-w-2xl text-xs text-muted-foreground"
               >
                 {app.t(scopeWarning(app.status))}
@@ -239,32 +242,17 @@
             {#if bar.apply && missing.length}<p
                 class="mt-1 text-xs text-destructive"
               >
-                {app.t("Choose executables for these games before Apply")}:
+                {app.t("Choose executables for these games before blocking")}:
                 <span dir="auto"
                   >{missing.map((target) => target.gameName).join(", ")}</span
                 >
               </p>{/if}
           </div>
-          {#if bar.apply || app.firewallAction === "apply"}<div
-              class="flex gap-2"
-            >
-              <Button
-                data-action="apply"
-                aria-describedby={`${applySummary}${bar.apply ? ` ${applyWarning}` : ""}`}
-                disabled={app.busy || !bar.apply || missing.length > 0}
-                onclick={apply}
-                >{#if app.firewallAction === "apply"}<LoaderCircle
-                    class="animate-spin"
-                  />{:else}<Check />{/if}{app.t(
-                  app.firewallAction === "apply" ? "Applying…" : "Apply",
-                )}</Button
-              >
-            </div>{/if}
         </footer>{/if}
     </main>
     <!-- svelte-ignore a11y_no_noninteractive_tabindex (Keyboard users must be able to focus and scroll this region.) -->
     <div
-      class="library-panel"
+      class="min-h-0 min-w-0 overflow-auto overscroll-contain"
       dir={direction}
       role="region"
       aria-label={app.t("Game library")}
@@ -273,16 +261,29 @@
       <GameLibrary
         {app}
         {version}
-        managing={view === "manage"}
+        managing={manageOpen}
         onmanage={manage}
-        onfolder={addFolder}
-        onexecutable={addExecutable}
         onselect={showGame}
         onabout={() => (aboutOpen = true)}
       />
     </div>
   </div>
 </Tabs.Root>
+<Dialog.Root bind:open={manageOpen}>
+  <Dialog.Content
+    class="sm:max-w-3xl max-h-[85vh] overflow-y-auto"
+    aria-describedby={undefined}
+  >
+    <Dialog.Title class="sr-only">{app.t("Manage games")}</Dialog.Title>
+    <ManageGames
+      {app}
+      ondone={() => (manageOpen = false)}
+      oncancel={() => (manageOpen = false)}
+      onfolder={addFolder}
+      onexecutable={addExecutable}
+    />
+  </Dialog.Content>
+</Dialog.Root>
 <AlertDialog.Root bind:open={confirmOpen}>
   <AlertDialog.Content
     ><AlertDialog.Header
@@ -290,7 +291,11 @@
       ><AlertDialog.Description
         >{app.t(
           "Remove only LobbyLocker-owned firewall rules? Other firewall rules are untouched.",
-        )}</AlertDialog.Description
+        )}<span class="mt-2 block text-xs"
+          >{app.t(
+            "Deleting an AppImage cannot clean up. Reset first, wait for confirmation, then delete it.",
+          )}</span
+        ></AlertDialog.Description
       ></AlertDialog.Header
     ><AlertDialog.Footer
       ><AlertDialog.Cancel>{app.t("Cancel")}</AlertDialog.Cancel

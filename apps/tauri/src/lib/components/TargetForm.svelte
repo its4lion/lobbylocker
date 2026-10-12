@@ -7,17 +7,8 @@
   import { Plus } from "@lucide/svelte";
   import type { Backend } from "$lib/backend.svelte";
   import type { Endpoint, Game, Protocol } from "$lib/types";
-  let {
-    app,
-    game,
-    area,
-    collapsible = false,
-  }: {
-    app: Backend;
-    game: Game;
-    area: string;
-    collapsible?: boolean;
-  } = $props();
+  let { app, game, area }: { app: Backend; game: Game; area: string } =
+    $props();
   const prefix = $props.id();
   let address = $state("");
   let protocol = $state<Protocol>("udp");
@@ -64,7 +55,7 @@
 
 {#snippet fields()}
   <fieldset disabled={app.busy} class="space-y-4">
-    <div>
+    <div class="grid gap-2">
       <Label for={`${prefix}-address`}>{app.t("IP address or subnet")}</Label
       ><Input
         id={`${prefix}-address`}
@@ -75,7 +66,7 @@
       />
     </div>
     <div class="grid grid-cols-2 gap-3">
-      <div>
+      <div class="grid gap-2">
         <Label for={`${prefix}-protocol`}>{app.t("Protocol")}</Label
         ><ChoiceSelect
           id={`${prefix}-protocol`}
@@ -88,7 +79,7 @@
           ]}
         />
       </div>
-      <div>
+      <div class="grid gap-2">
         <Label for={`${prefix}-ports`}>{app.t("Remote port / range")}</Label
         ><Input
           id={`${prefix}-ports`}
@@ -98,7 +89,7 @@
         />
       </div>
     </div>
-    <div>
+    <div class="grid gap-2">
       <Label for={`${prefix}-region`}>{app.t("Server location")}</Label
       ><ChoiceSelect
         id={`${prefix}-region`}
@@ -121,7 +112,7 @@
         ]}
       />
     </div>
-    {#if attachment === "__new" || !regions.length}<div>
+    {#if attachment === "__new" || !regions.length}<div class="grid gap-2">
         <Label for={`${prefix}-location`}
           >{app.t("New server location name")}</Label
         ><Input id={`${prefix}-location`} bind:value={location} />
@@ -137,24 +128,17 @@
   </p>
 {/snippet}
 
-{#if collapsible}
-  <Button size="sm" disabled={app.busy} onclick={() => (open = true)}
-    ><Plus />{app.t("Add an IP")}</Button
-  >
-  <Dialog.Root bind:open>
-    <Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-xl">
-      <Dialog.Header>
-        <Dialog.Title>{app.t("Add an IP or subnet")}</Dialog.Title>
-        <Dialog.Description
-          >{app.t("Add a custom address to this region.")}</Dialog.Description
-        >
-      </Dialog.Header>
-      <form onsubmit={save} class="mt-4">{@render fields()}</form>
-    </Dialog.Content>
-  </Dialog.Root>
-{:else}
-  <form onsubmit={save} class="space-y-4 rounded-lg border p-4">
-    <h3 class="font-medium">{app.t("Add an IP or subnet")}</h3>
-    {@render fields()}
-  </form>
-{/if}
+<Button size="sm" disabled={app.busy} onclick={() => (open = true)}
+  ><Plus />{app.t("Add an IP")}</Button
+>
+<Dialog.Root bind:open>
+  <Dialog.Content class="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+    <Dialog.Header>
+      <Dialog.Title>{app.t("Add an IP or subnet")}</Dialog.Title>
+      <Dialog.Description
+        >{app.t("Add a custom address to this region.")}</Dialog.Description
+      >
+    </Dialog.Header>
+    <form onsubmit={save} class="mt-4">{@render fields()}</form>
+  </Dialog.Content>
+</Dialog.Root>

@@ -3,6 +3,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { selectedLocale, translate } from "./i18n";
 import { libraryGames, libraryCandidates, blockGameIds } from "./game";
+import { missingPrograms } from "./firewall";
 import type {
   Connection,
   Game,
@@ -40,6 +41,7 @@ export class Backend {
   private startupScanAttempted = false;
   private startupReadAttempted = false;
   private statusReloaded = false;
+  private freshDataChecked = new Set<string>();
   get games() {
     return libraryGames(
       this.status?.snapshot.games ?? [],
@@ -119,8 +121,28 @@ export class Backend {
         this.startupScanAttempted = true;
         await this.detectGames();
       }
+      // Selections saved but not yet written are applied now rather than
+      // waiting for the next toggle.
+      void this.writeBlocks();
     }, false);
     if (this.status?.selfUpdateSupported) void this.checkForUpdates(true);
+  }
+
+  /**
+   * Refresh official server data for the game the user opened, so they never
+   * have to press refresh. Runs at most daily per game, never blocks the UI,
+   * and reloads the snapshot only when a feed returned new targets. Failures
+   * are silent on purpose: the manual refresh button still reports errors.
+   */
+  async ensureFreshData(gameId: string) {
+    if (!isTauri() || !gameId || this.freshDataChecked.has(gameId)) return;
+    this.freshDataChecked.add(gameId);
+    try {
+      await invoke("ensure_fresh_data", { gameId });
+      await this.reload();
+    } catch {
+      // Never surfaced. Offline use is normal, not an error worth showing.
+    }
   }
 
   async checkForUpdates(silent = false) {
@@ -252,6 +274,17 @@ export class Backend {
           this.error ||
           "Could not read firewall status.";
       if (action === "read") this.error = "";
+      else if (
+        !success &&
+        this.statusReloaded &&
+        this.status?.verificationError &&
+        this.error.includes(this.status.verificationError)
+      ) {
+        // A completed update with unreadable results is one failure, not two
+        // alerts. Keep the operation context in the expandable readback details.
+        this.firewallError = this.error;
+        this.error = "";
+      }
       this.firewallFeedback =
         action === "read" ? null : success ? action : "error";
       return success;
@@ -305,9 +338,34 @@ export class Backend {
     const preferences = structuredClone(
       $state.snapshot(this.status.snapshot.preferences),
     );
+    const before = JSON.stringify(preferences.blockedRegions);
     change(preferences);
-    return this.command("set_preferences", { preferences });
+    const blocksChanged = JSON.stringify(preferences.blockedRegions) !== before;
+    return this.command("set_preferences", { preferences }).then((saved) => {
+      // Only a toggle writes rules. Adding targets or refreshing server data
+      // must never change the firewall on its own.
+      if (saved && blocksChanged) void this.writeBlocks();
+      return saved;
+    });
   }
+
+  apply() {
+    return this.command("apply_rules");
+  }
+
+  /**
+   * Writes pending selections immediately.
+   *
+   * Never runs while another operation holds the guard, and never for a game
+   * that still needs an executable, so a pending choice cannot silently reach
+   * the firewall in a partial state.
+   */
+  private async writeBlocks() {
+    if (this.busy || !this.status?.dirty) return;
+    if (missingPrograms(this.status).length) return;
+    await this.apply();
+  }
+
   saveGame(game: Game) {
     return this.command("save_game", { game: $state.snapshot(game) });
   }
