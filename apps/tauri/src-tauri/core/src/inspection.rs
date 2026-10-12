@@ -12,10 +12,50 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::{BTreeMap, BTreeSet},
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr},
 };
 
 pub const MAX_READBACK_BYTES: usize = 5_000_000;
+
+/// Keep permission failures distinct from invalid OS output. Parsing errors must
+/// never cause another authentication prompt, and helper IPC still uses strings.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum InspectionError {
+    PermissionDenied(String),
+    Other(String),
+}
+
+impl std::fmt::Display for InspectionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PermissionDenied(message) | Self::Other(message) => f.write_str(message),
+        }
+    }
+}
+
+impl From<String> for InspectionError {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
+}
+
+impl From<&str> for InspectionError {
+    fn from(message: &str) -> Self {
+        Self::Other(message.into())
+    }
+}
+
+impl From<std::io::Error> for InspectionError {
+    fn from(error: std::io::Error) -> Self {
+        if error.kind() == std::io::ErrorKind::PermissionDenied {
+            Self::PermissionDenied(error.to_string())
+        } else {
+            Self::Other(error.to_string())
+        }
+    }
+}
+
+pub(crate) type InspectionResult<T> = std::result::Result<T, InspectionError>;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -393,6 +433,34 @@ fn address_key(address: &str) -> Result<String> {
     Ok(net.to_string())
 }
 
+/// NetSecurity returns IPv4 subnets as address/dotted-mask even when Apply used
+/// numeric CIDR. Convert only at the Windows readback boundary, then retain the
+/// shared target validation and canonical key format.
+fn windows_address_key(address: &str) -> Result<String> {
+    let address = address.trim();
+    let parse = || -> Result<String> {
+        if let Some((ip, mask)) = address
+            .split_once('/')
+            .filter(|(_, mask)| mask.contains('.'))
+        {
+            let ip = ip
+                .parse::<Ipv4Addr>()
+                .map_err(|_| "Invalid IPv4 address in Windows firewall output.")?;
+            let mask = mask
+                .parse::<Ipv4Addr>()
+                .map_err(|_| "Invalid IPv4 subnet mask in Windows firewall output.")?;
+            let net = ipnet::Ipv4Net::with_netmask(ip, mask)
+                .map_err(|_| "Windows firewall reported a non-contiguous IPv4 subnet mask.")?;
+            address_key(&net.to_string())
+        } else {
+            address_key(address)
+        }
+    };
+    parse().map_err(|error| {
+        format!("Could not parse address reported by Windows ({address:?}): {error}")
+    })
+}
+
 pub fn expected_keys(rules: &[FirewallRule]) -> Result<BTreeSet<RuleKey>> {
     let mut keys = BTreeSet::new();
     for rule in rules {
@@ -655,7 +723,7 @@ pub fn windows_snapshot(json: &Value) -> Result<Inspection> {
             Ok(ObservedRule {
                 source_id: rule.source_id,
                 key: RuleKey {
-                    address: address_key(&rule.address)?,
+                    address: windows_address_key(&rule.address)?,
                     protocol: protocol(&rule.protocol)?,
                     ports: parse_ports(&ports)?,
                     program: rule
@@ -678,7 +746,7 @@ pub fn windows_snapshot(json: &Value) -> Result<Inspection> {
 /// contains no write cmdlets and never runs a selected game executable.
 pub fn windows_inspection_script() -> String {
     format!(
-        r#"$ErrorActionPreference='Stop'; {WINDOWS_NETSECURITY}[Console]::OutputEncoding=(New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false); $supported=$true; $rows=@(); $profiles=@(Get-NetFirewallProfile -PolicyStore ActiveStore); $services=@(Get-Service -Name MpsSvc,BFE); $enforced=$profiles.Count -eq 3 -and $services.Count -eq 2 -and @($services | Where-Object {{[string]$_.Status -ne 'Running'}}).Count -eq 0 -and @($profiles | Where-Object {{[string]$_.Enabled -ne 'True' -or [string]$_.AllowLocalFirewallRules -eq 'False'}}).Count -eq 0;
+        r#"$ErrorActionPreference='Stop'; [Console]::OutputEncoding=(New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false); try {{ {WINDOWS_NETSECURITY}$supported=$true; $rows=@(); $profiles=@(Get-NetFirewallProfile -PolicyStore ActiveStore); $services=@(Get-Service -Name MpsSvc,BFE); $enforced=$profiles.Count -eq 3 -and $services.Count -eq 2 -and @($services | Where-Object {{[string]$_.Status -ne 'Running'}}).Count -eq 0 -and @($profiles | Where-Object {{[string]$_.Enabled -ne 'True' -or [string]$_.AllowLocalFirewallRules -eq 'False'}}).Count -eq 0;
 $owned=@(Get-NetFirewallRule -PolicyStore ActiveStore | Where-Object {{$_.Group -eq '{WINDOWS_GROUP}'}});
 foreach ($r in $owned) {{
  if ([string]$r.Enabled -ne 'True' -or [string]$r.Direction -ne 'Outbound' -or [string]$r.Action -ne 'Block') {{continue}}
@@ -687,11 +755,51 @@ foreach ($r in $owned) {{
  $source=$null; if ([string]$r.Name -match '^LobbyLocker\.[a-fA-F0-9]{{32}}\.([a-zA-Z0-9_-]{{1,96}})\.(TCP|UDP|Any)$') {{$source=$Matches[1]}}
  $rows += [pscustomobject]@{{address=[string]$a.RemoteAddress[0];protocol=[string]$p.Protocol;ports=[string]$p.RemotePort[0];program=[string]$app.Program;sourceId=$source}}
 }}
-[pscustomobject]@{{enforced=$enforced;supported=$supported;rules=@($rows)}}|ConvertTo-Json -Depth 5 -Compress"#
+[pscustomobject]@{{enforced=$enforced;supported=$supported;rules=@($rows)}}|ConvertTo-Json -Depth 5 -Compress
+}} catch {{
+ $denied=$_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::PermissionDenied; $exception=$_.Exception;
+ while ($null -ne $exception) {{
+  if ($exception -is [System.UnauthorizedAccessException] -or $exception.HResult -eq -2147024891 -or $exception.HResult -eq -2147217405) {{$denied=$true}}
+  $exception=$exception.InnerException;
+ }}
+ [pscustomobject]@{{permissionDenied=$denied;message=[string]$_.Exception.Message}}|ConvertTo-Json -Compress; exit 1
+}}"#
     )
 }
 
-fn query(command: &mut std::process::Command) -> Result<Value> {
+#[cfg(any(target_os = "windows", test))]
+fn windows_query_error(stdout: &[u8], stderr: &[u8]) -> InspectionError {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct QueryError {
+        permission_denied: bool,
+        message: String,
+    }
+    // PowerShell reports an error category/HRESULT, not localized error text.
+    if let Ok(error) = serde_json::from_slice::<QueryError>(stdout) {
+        if error.permission_denied {
+            InspectionError::PermissionDenied(error.message)
+        } else {
+            InspectionError::Other(error.message)
+        }
+    } else {
+        InspectionError::Other(String::from_utf8_lossy(stderr).trim().to_owned())
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn nft_query_error(stderr: &[u8]) -> InspectionError {
+    // nft has no structured error category. Its queries run with LC_ALL=C so
+    // these native permission diagnostics are stable across UI/system locales.
+    let message = String::from_utf8_lossy(stderr).trim().to_owned();
+    if message.contains("Operation not permitted") || message.contains("Permission denied") {
+        InspectionError::PermissionDenied(message)
+    } else {
+        InspectionError::Other(message)
+    }
+}
+
+fn query(command: &mut std::process::Command) -> InspectionResult<Value> {
     use std::{
         io::Read,
         process::Stdio,
@@ -704,7 +812,14 @@ fn query(command: &mut std::process::Command) -> Result<Value> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Could not inspect firewall rules: {e}"))?;
+        .map_err(|error| {
+            let message = format!("Could not inspect firewall rules: {error}");
+            if error.kind() == std::io::ErrorKind::PermissionDenied {
+                InspectionError::PermissionDenied(message)
+            } else {
+                InspectionError::Other(message)
+            }
+        })?;
     let stdout = child
         .stdout
         .take()
@@ -744,34 +859,47 @@ fn query(command: &mut std::process::Command) -> Result<Value> {
     let stdout = out
         .join()
         .map_err(|_| "Inspection output reader failed.")?
-        .map_err(|e| e.to_string())?;
+        .map_err(InspectionError::from)?;
     let stderr = err
         .join()
         .map_err(|_| "Inspection error reader failed.")?
-        .map_err(|e| e.to_string())?;
-    if !status?.success() {
-        return Err(String::from_utf8_lossy(&stderr).trim().to_owned());
-    }
+        .map_err(InspectionError::from)?;
     if stdout.len() > MAX_READBACK_BYTES {
         return Err("Firewall inspection response is too large.".into());
     }
+    if !status?.success() {
+        #[cfg(target_os = "windows")]
+        return Err(windows_query_error(&stdout, &stderr));
+        #[cfg(target_os = "linux")]
+        return Err(nft_query_error(&stderr));
+        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+        return Err(String::from_utf8_lossy(&stderr).trim().to_owned().into());
+    }
     serde_json::from_slice(&stdout)
-        .map_err(|e| format!("Invalid firewall inspection response: {e}"))
+        .map_err(|e| format!("Invalid firewall inspection response: {e}").into())
 }
 
 pub fn inspect() -> Result<Inspection> {
+    inspect_with_error().map_err(|error| error.to_string())
+}
+
+pub(crate) fn inspect_with_error() -> InspectionResult<Inspection> {
     #[cfg(target_os = "linux")]
     {
-        let tables =
-            query(std::process::Command::new("/usr/bin/nft").args(["-j", "-n", "list", "tables"]))?;
+        let tables = query(
+            std::process::Command::new("/usr/bin/nft")
+                .env("LC_ALL", "C")
+                .args(["-j", "-n", "list", "tables"]),
+        )?;
         if !owned_table_present(&tables)? {
             return Ok(Inspection::default());
         }
         let json = query(
             std::process::Command::new("/usr/bin/nft")
+                .env("LC_ALL", "C")
                 .args(["-j", "-n", "list", "table", "inet", TABLE]),
         )?;
-        linux_snapshot(&json)
+        linux_snapshot(&json).map_err(Into::into)
     }
     #[cfg(target_os = "windows")]
     {
@@ -781,7 +909,7 @@ pub fn inspect() -> Result<Inspection> {
             "-Command",
             &windows_inspection_script(),
         ]))?;
-        windows_snapshot(&json)
+        windows_snapshot(&json).map_err(Into::into)
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {
@@ -790,7 +918,7 @@ pub fn inspect() -> Result<Inspection> {
 }
 
 #[cfg(any(target_os = "linux", test))]
-fn owned_table_present(json: &Value) -> Result<bool> {
+pub(crate) fn owned_table_present(json: &Value) -> Result<bool> {
     let entries = json["nftables"]
         .as_array()
         .ok_or("Invalid nftables table response.")?;
@@ -814,417 +942,5 @@ fn owned_table_present(json: &Value) -> Result<bool> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn expected(program: Option<&str>) -> Vec<FirewallRule> {
-        vec![FirewallRule {
-            endpoint: crate::model::Endpoint {
-                id: "test-rule".into(),
-                address: "185.25.183.163".into(),
-                protocol: Protocol::Udp,
-                ports: Some("27015-27060".into()),
-                custom: false,
-            },
-            program: program.map(str::to_owned),
-        }]
-    }
-    fn nft() -> Value {
-        json!({"nftables":[
-            {"metainfo":{"json_schema_version":1}},
-            {"table":{"family":"inet","name":TABLE,"comment":OWNER,"handle":7}},
-            {"chain":{"family":"inet","table":TABLE,"name":"outbound","type":"filter","hook":"output","prio":10,"policy":"accept"}},
-            {"rule":{"family":"inet","table":TABLE,"chain":"outbound","comment":"ll:test-rule","expr":[
-                {"match":{"op":"==","left":{"payload":{"protocol":"ip","field":"daddr"}},"right":"185.25.183.163"}},
-                {"match":{"op":"==","left":{"meta":{"key":"l4proto"}},"right":"udp"}},
-                {"match":{"op":"==","left":{"payload":{"protocol":"udp","field":"dport"}},"right":{"range":[27015,27060]}}},
-                {"counter":{"packets":183,"bytes":9120}}, {"drop":null}
-            ]}}
-        ]})
-    }
-    fn windows() -> Value {
-        json!({"enforced":true,"supported":true,"rules":[{"address":"185.25.183.163/32","protocol":"17","ports":"27015-27060","program":"C:\\Games\\game.exe"}]})
-    }
-    fn game() -> Game {
-        let mut game = crate::installed::custom_game(
-            "example".into(),
-            "Example",
-            "Europe",
-            "185.25.183.163",
-            Protocol::Udp,
-            Some("27015-27060".into()),
-        )
-        .unwrap();
-        game.executable_path = Some(r"C:\Games\game.exe".into());
-        game
-    }
-    #[test]
-    fn observed_blocks_are_independent_of_saved_choices_and_source_labels() {
-        let game = game();
-        let report = linux_snapshot(&nft()).unwrap();
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Blocked
-        );
-        let mut narrower = report.clone();
-        narrower.rules[0].key.ports = Some((27015, 27020));
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &narrower,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Partial
-        );
-        narrower.rules[0].key.address = "203.0.113.7/32".into();
-        narrower.rules[0].source_id = Some(format!("example-{}", game.regions[0].endpoints[0].id));
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &narrower,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::None
-        );
-        let targets = observed_targets(
-            std::slice::from_ref(&game),
-            &narrower,
-            FirewallScope::SystemWide,
-            &BTreeSet::new(),
-        );
-        assert_eq!(targets[0].endpoints[0].address, "203.0.113.7/32");
-        assert_eq!(
-            targets[0].endpoints[0].ports.as_deref(),
-            Some("27015-27020")
-        );
-        let empty = Inspection::default();
-        assert_eq!(
-            region_states(&[game], &empty, FirewallScope::SystemWide)["example:custom"],
-            RegionState::None
-        );
-    }
-    #[test]
-    fn program_scope_not_rule_name_determines_windows_coverage() {
-        let mut game = game();
-        let report = windows_snapshot(&windows()).unwrap();
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::Executable
-            )["example:custom"],
-            RegionState::Blocked
-        );
-        game.executable_path = Some(r"D:\Games\other.exe".into());
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::Executable
-            )["example:custom"],
-            RegionState::None
-        );
-        game.executable_path = None;
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::Executable
-            )["example:custom"],
-            RegionState::Unknown
-        );
-        let mut legacy = windows();
-        legacy["rules"][0]["program"] = json!("Any");
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &windows_snapshot(&legacy).unwrap(),
-                FirewallScope::Executable
-            )["example:custom"],
-            RegionState::Blocked
-        );
-        assert_eq!(
-            region_states(&[game], &Inspection::default(), FirewallScope::Executable)
-                ["example:custom"],
-            RegionState::None
-        );
-    }
-    #[test]
-    fn broader_ranges_and_partial_protocols_are_taken_from_the_os() {
-        let mut game = game();
-        let mut report = linux_snapshot(&nft()).unwrap();
-        report.rules[0].key.address = "185.25.183.0/24".into();
-        report.rules[0].key.ports = None;
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Blocked
-        );
-        game.regions[0].endpoints[0].protocol = Protocol::Any;
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Partial
-        );
-        let mut tcp = report.rules[0].clone();
-        tcp.key.protocol = "tcp".into();
-        report.rules.push(tcp);
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Blocked
-        );
-        game.regions[0].endpoints[0].ports = None;
-        assert_eq!(
-            region_states(&[game], &report, FirewallScope::SystemWide)["example:custom"],
-            RegionState::Partial
-        );
-    }
-    #[test]
-    fn unmapped_and_previous_executable_rules_are_not_replaced_with_catalogue_targets() {
-        let game = game();
-        let mut report = windows_snapshot(&windows()).unwrap();
-        report.rules[0].source_id = Some(format!("example-{}", game.regions[0].endpoints[0].id));
-        let mut old = report.rules[0].clone();
-        old.key.program = Some(r"d:\games\old.exe".into());
-        report.rules.push(old);
-        let mut unmapped = report.rules[0].clone();
-        unmapped.key.address = "203.0.113.0/24".into();
-        unmapped.source_id = None;
-        report.rules.push(unmapped);
-        let targets = observed_targets(
-            &[game],
-            &report,
-            FirewallScope::Executable,
-            &BTreeSet::new(),
-        );
-        assert_eq!(targets.len(), 3);
-        assert!(targets
-            .iter()
-            .any(|target| target.executable_path.as_deref() == Some(r"d:\games\old.exe")));
-        assert!(targets
-            .iter()
-            .any(|target| target.game_id.is_empty()
-                && target.endpoints[0].address == "203.0.113.0/24"));
-    }
-    #[test]
-    fn malformed_readbacks_and_malformed_ports_are_never_verified() {
-        let mut report = linux_snapshot(&nft()).unwrap();
-        report.rules[0].key.protocol = "icmp".into();
-        assert!(report.validate().is_err());
-        report.rules[0].key.protocol = "udp".into();
-        report.rules[0].key.ports = Some((27060, 27015));
-        assert!(report.validate().is_err());
-        assert!(Inspection::from_bytes(br#"{"rules":[],"extra":"unexpected"}"#).is_err());
-        assert!(Inspection::from_bytes(b"permission denied").is_err());
-    }
-    #[test]
-    fn multiple_os_rules_cover_address_and_port_ranges_only_when_no_gaps_remain() {
-        let mut game = game();
-        game.regions[0].endpoints[0].address = "185.25.183.0/24".into();
-        let mut report = linux_snapshot(&nft()).unwrap();
-        report.rules[0].key.address = "185.25.183.0/25".into();
-        let mut other = report.rules[0].clone();
-        other.key.address = "185.25.183.128/25".into();
-        report.rules.push(other);
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Blocked
-        );
-        report.rules[0].key.ports = Some((27015, 27030));
-        report.rules[1].key.ports = Some((27031, 27060));
-        // Port and address coverage cannot be combined across different hosts.
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Partial
-        );
-        for rule in &mut report.rules {
-            rule.key.address = "185.25.183.0/24".into();
-        }
-        assert_eq!(
-            region_states(
-                std::slice::from_ref(&game),
-                &report,
-                FirewallScope::SystemWide
-            )["example:custom"],
-            RegionState::Blocked
-        );
-        report.rules[1].key.ports = Some((27032, 27060));
-        assert_eq!(
-            region_states(&[game], &report, FirewallScope::SystemWide)["example:custom"],
-            RegionState::Partial
-        );
-        assert!(!ranges_cover(vec![(0, u128::MAX - 1)], (0, u128::MAX)));
-        assert!(ranges_cover(vec![(0, u128::MAX)], (0, u128::MAX)));
-    }
-    #[test]
-    fn absent_owned_tables_are_distinct_from_invalid_or_denied_reads() {
-        assert!(!owned_table_present(&json!({"nftables":[]})).unwrap());
-        assert!(!owned_table_present(
-            &json!({"nftables":[{"table":{"family":"inet","name":"other"}}]})
-        )
-        .unwrap());
-        assert!(owned_table_present(
-            &json!({"nftables":[{"table":{"family":"inet","name":TABLE}}]})
-        )
-        .unwrap());
-        assert!(owned_table_present(&json!({"nftables":[{"error":"permission denied"}]})).is_err());
-        assert!(owned_table_present(&json!({"nftables":[{"table":{"name":TABLE}}]})).is_err());
-    }
-    #[test]
-    fn exact_owned_nft_rules_match_after_restart_and_counters_do_not_affect_verification() {
-        let keys = expected_keys(&expected(None)).unwrap();
-        assert_eq!(
-            compare(&linux_keys(&nft()).unwrap(), &keys),
-            Verification::Matched
-        );
-        let mut changed = nft();
-        changed["nftables"][3]["rule"]["expr"][0]["match"]["right"] = json!("185.25.183.179");
-        assert_eq!(
-            compare(&linux_keys(&changed).unwrap(), &keys),
-            Verification::Different
-        );
-        let mut empty = nft();
-        empty["nftables"].as_array_mut().unwrap().pop();
-        assert_eq!(
-            compare(&linux_keys(&empty).unwrap(), &keys),
-            Verification::Empty
-        );
-    }
-    #[test]
-    fn ownership_chain_shape_and_drop_action_are_not_trusted_from_names_alone() {
-        let mut other_owner = nft();
-        other_owner["nftables"][1]["table"]["comment"] = json!("Someone else");
-        assert!(linux_keys(&other_owner).is_err());
-        let mut dormant = nft();
-        dormant["nftables"][1]["table"]["flags"] = json!(["dormant"]);
-        assert!(linux_keys(&dormant).is_err());
-        let mut wrong_hook = nft();
-        wrong_hook["nftables"][2]["chain"]["hook"] = json!("input");
-        assert!(linux_keys(&wrong_hook).is_err());
-        let mut allowed = nft();
-        allowed["nftables"][3]["rule"]["expr"][4] = json!({"accept":null});
-        assert!(linux_keys(&allowed).is_err());
-        let mut extra_match = nft();
-        extra_match["nftables"][3]["rule"]["expr"][3] =
-            json!({"match":{"op":"==","left":{"meta":{"key":"skuid"}},"right":1000}});
-        assert!(linux_keys(&extra_match).is_err());
-        let mut unexpected_chain = nft();
-        unexpected_chain["nftables"]
-            .as_array_mut()
-            .unwrap()
-            .push(json!({"chain":{"name":"extra"}}));
-        assert!(linux_keys(&unexpected_chain).is_err());
-        assert!(linux_keys(&json!({"nftables":[]})).is_err());
-        assert!(linux_keys(&json!({"error":"permission denied"})).is_err());
-    }
-    #[test]
-    fn ipv4_ipv6_prefixes_and_single_ports_are_normalized() {
-        let mut json = nft();
-        json["nftables"][3]["rule"]["expr"][0]["match"]["right"] =
-            json!({"prefix":{"addr":"185.25.183.0","len":24}});
-        json["nftables"][3]["rule"]["expr"][2]["match"]["right"] = json!(27015);
-        let mut rules = expected(None);
-        rules[0].endpoint.address = "185.25.183.9/24".into();
-        rules[0].endpoint.ports = Some("27015".into());
-        assert_eq!(linux_keys(&json).unwrap(), expected_keys(&rules).unwrap());
-        json["nftables"][3]["rule"]["expr"][0]["match"]["left"]["payload"]["protocol"] =
-            json!("ip6");
-        json["nftables"][3]["rule"]["expr"][0]["match"]["right"] =
-            json!({"prefix":{"addr":"2001:db8::","len":64}});
-        rules[0].endpoint.address = "2001:db8::7/64".into();
-        assert_eq!(linux_keys(&json).unwrap(), expected_keys(&rules).unwrap());
-    }
-    #[test]
-    fn any_protocol_with_ports_requires_both_tcp_and_udp_blocks() {
-        let mut rules = expected(None);
-        rules[0].endpoint.protocol = Protocol::Any;
-        let mut json = nft();
-        let mut tcp = json["nftables"][3].clone();
-        tcp["rule"]["expr"][1]["match"]["right"] = json!("tcp");
-        tcp["rule"]["expr"][2]["match"]["left"]["payload"]["protocol"] = json!("tcp");
-        assert_eq!(
-            compare(&linux_keys(&json).unwrap(), &expected_keys(&rules).unwrap()),
-            Verification::Different
-        );
-        json["nftables"].as_array_mut().unwrap().push(tcp);
-        assert_eq!(
-            compare(&linux_keys(&json).unwrap(), &expected_keys(&rules).unwrap()),
-            Verification::Matched
-        );
-    }
-    #[test]
-    fn windows_checks_effective_program_scope_and_legacy_global_rules_do_not_match() {
-        let keys = expected_keys(&expected(Some(r"c:\games\GAME.exe"))).unwrap();
-        assert_eq!(
-            compare(&windows_keys(&windows()).unwrap(), &keys),
-            Verification::Matched
-        );
-        let mut global = windows();
-        global["rules"][0]["program"] = json!("Any");
-        assert_eq!(
-            compare(&windows_keys(&global).unwrap(), &keys),
-            Verification::Different
-        );
-        let mut changed_program = windows();
-        changed_program["rules"][0]["program"] = json!(r"D:\Games\other.exe");
-        assert_eq!(
-            compare(&windows_keys(&changed_program).unwrap(), &keys),
-            Verification::Different
-        );
-        let mut disabled = windows();
-        disabled["enforced"] = json!(false);
-        assert!(windows_keys(&disabled).is_err());
-        let mut constrained = windows();
-        constrained["supported"] = json!(false);
-        assert!(windows_keys(&constrained).is_err());
-        assert_eq!(
-            compare(
-                &windows_keys(&json!({"enforced":true,"supported":true,"rules":[]})).unwrap(),
-                &keys
-            ),
-            Verification::Empty
-        );
-    }
-    #[test]
-    fn inspection_script_is_read_only_and_uses_active_store() {
-        let script = windows_inspection_script();
-        assert!(script.contains(WINDOWS_GROUP));
-        assert!(script.contains("-PolicyStore ActiveStore"));
-        assert!(script.contains("Get-NetFirewallApplicationFilter"));
-        assert!(script.contains("Get-NetFirewallProfile"));
-        assert!(script.contains("Get-Service -Name MpsSvc,BFE"));
-        assert!(script.contains(WINDOWS_NETSECURITY));
-        for write in [
-            "New-NetFirewallRule",
-            "Remove-NetFirewallRule",
-            "Set-NetFirewallRule",
-            "Set-NetFirewallProfile",
-            "Start-Process",
-        ] {
-            assert!(!script.contains(write));
-        }
-    }
-}
+#[path = "../tests/unit/inspection.rs"]
+mod tests;

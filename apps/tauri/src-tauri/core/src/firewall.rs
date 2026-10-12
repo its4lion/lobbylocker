@@ -117,9 +117,13 @@ pub fn powershell_script(request: &Request) -> Result<String> {
     }
     let preamble = format!("$ErrorActionPreference='Stop'; {WINDOWS_NETSECURITY}$old=@(Get-NetFirewallRule -PolicyStore PersistentStore | Where-Object {{$_.Group -eq '{WINDOWS_GROUP}'}}); ");
     let Request::Apply { rules } = request else {
-        return Ok(format!(
-            "{preamble}$old | Remove-NetFirewallRule -ErrorAction Stop;"
-        ));
+        let mut script = format!("{preamble}$old | Remove-NetFirewallRule -ErrorAction Stop; ");
+        // Confirm both saved and effective rules are gone, including disabled
+        // rules that are intentionally omitted from the UI's active-block list.
+        for store in ["PersistentStore", "ActiveStore"] {
+            script.push_str(&format!("if (@(Get-NetFirewallRule -PolicyStore {store} | Where-Object {{$_.Group -eq '{WINDOWS_GROUP}'}}).Count -ne 0) {{ throw 'LobbyLocker firewall rules remain after Reset.' }}; "));
+        }
+        return Ok(script);
     };
     let transaction = uuid::Uuid::new_v4().simple().to_string();
     // Validate every program before creating new rules or removing the old ones.
@@ -169,11 +173,7 @@ fn owned_table_exists() -> Result<bool> {
     }
     let json: serde_json::Value =
         serde_json::from_slice(&tables.stdout).map_err(|e| e.to_string())?;
-    let exists = json["nftables"].as_array().is_some_and(|entries| {
-        entries
-            .iter()
-            .any(|e| e["table"]["family"] == "inet" && e["table"]["name"] == TABLE)
-    });
+    let exists = inspection::owned_table_present(&json)?;
     if !exists {
         return Ok(false);
     }
@@ -292,7 +292,13 @@ fn execute_privileged(request: &Request) -> Result<()> {
         let script = nft_script(request, owned_table_exists()?)?;
         run_nft(&script, true)?;
         // A single nft batch replaces the table atomically.
-        run_nft(&script, false)
+        run_nft(&script, false)?;
+        // Keep the operation lock until removal is confirmed. Package managers
+        // must not lose the cleanup executable on a false-successful Reset.
+        if matches!(request, Request::Reset {}) && owned_table_exists()? {
+            return Err("LobbyLocker firewall rules remain after Reset.".into());
+        }
+        Ok(())
     }
     #[cfg(target_os = "windows")]
     {
@@ -465,11 +471,21 @@ pub fn change_with_readback(request: &Request) -> Result<FirewallOutcome> {
 
 /// No files, locks, config, or firewall state are written by a Verify request.
 pub fn inspect_firewall(elevated: bool) -> Result<Inspection> {
-    let direct = inspection::inspect();
-    if !elevated || direct.is_ok() {
-        return direct;
+    inspect_with_fallback(inspection::inspect_with_error(), elevated, || {
+        elevated_readback(&Request::Verify {})?.inspection
+    })
+}
+
+fn inspect_with_fallback(
+    direct: inspection::InspectionResult<Inspection>,
+    elevated: bool,
+    authenticate: impl FnOnce() -> Result<Inspection>,
+) -> Result<Inspection> {
+    match direct {
+        Ok(report) => Ok(report),
+        Err(inspection::InspectionError::PermissionDenied(_)) if elevated => authenticate(),
+        Err(error) => Err(error.to_string()),
     }
-    elevated_readback(&Request::Verify {})?.inspection
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -553,199 +569,5 @@ fn elevated_readback(request: &Request) -> Result<FirewallOutcome> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn verify_requests_cannot_enter_a_mutating_script_or_execution_path() {
-        let request = Request::Verify {};
-        assert!(nft_script(&request, true).is_err());
-        assert!(powershell_script(&request).is_err());
-        assert!(execute_privileged(&request).is_err());
-        assert!(elevate(&request).is_err());
-        assert!(serde_json::from_str::<Request>(r#"{"action":"verify","rules":[]}"#).is_err());
-        assert!(serde_json::from_str::<Request>(
-            r#"{"action":"verify","command":"nft flush ruleset"}"#
-        )
-        .is_err());
-    }
-
-    #[test]
-    fn helper_outcomes_keep_readback_separate_from_mutation_success() {
-        let outcome = FirewallOutcome {
-            operation_error: Some("Update failed".into()),
-            inspection: Ok(Inspection::default()),
-        };
-        let parsed = FirewallOutcome::from_bytes(&serde_json::to_vec(&outcome).unwrap()).unwrap();
-        assert!(parsed.operation_error.is_some());
-        assert!(parsed.inspection.unwrap().rules.is_empty());
-        assert!(FirewallOutcome::from_bytes(b"success without readback").is_err());
-        assert!(FirewallOutcome::from_bytes(
-            br#"{"operationError":null,"inspection":{"Ok":{"rules":[]}},"extra":"evil"}"#
-        )
-        .is_err());
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn deleted_or_rebuilt_executables_require_restart_before_elevation() {
-        let root = tempfile::tempdir().unwrap();
-        let executable = root.path().join("lobbylocker-tauri");
-        std::fs::write(&executable, b"running build").unwrap();
-        let running = std::fs::metadata(&executable).unwrap();
-        assert_eq!(
-            linux_elevation_executable(&executable, None, &running).unwrap(),
-            executable
-        );
-        let replacement = root.path().join("replacement");
-        std::fs::write(&replacement, b"rebuilt app").unwrap();
-        std::fs::rename(replacement, &executable).unwrap();
-        assert_eq!(
-            linux_elevation_executable(&executable, None, &running).unwrap_err(),
-            EXECUTABLE_RESTART_REQUIRED
-        );
-        let deleted = root.path().join("lobbylocker-tauri (deleted)");
-        // Even though a replacement exists at the original path, do not run it
-        // as root from a stale process. No commands execute in these tests.
-        assert_eq!(
-            linux_elevation_executable(&deleted, None, &running).unwrap_err(),
-            EXECUTABLE_RESTART_REQUIRED
-        );
-        assert!(linux_elevation_executable(root.path(), None, &running).is_err());
-        assert!(
-            linux_elevation_executable(std::path::Path::new("relative-app"), None, &running)
-                .is_err()
-        );
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn appimage_uses_existing_outer_image_and_literal_deleted_names_remain_valid() {
-        let root = tempfile::tempdir().unwrap();
-        let executable = root.path().join("app (deleted)");
-        std::fs::write(&executable, b"literal filename, not a deleted inode").unwrap();
-        let running = std::fs::metadata(&executable).unwrap();
-        assert_eq!(
-            linux_elevation_executable(&executable, None, &running).unwrap(),
-            executable
-        );
-        let outer = root.path().join("LobbyLocker.AppImage");
-        std::fs::write(&outer, b"outer image").unwrap();
-        let inner = root.path().join("unmounted/AppRun");
-        assert_eq!(
-            linux_elevation_executable(&inner, Some(&outer), &running).unwrap(),
-            outer
-        );
-        assert!(linux_elevation_executable(
-            &inner,
-            Some(&root.path().join("missing.AppImage")),
-            &running
-        )
-        .is_err());
-        assert!(linux_elevation_executable(&executable, Some(root.path()), &running).is_err());
-    }
-    fn rule(protocol: Protocol, ports: Option<&str>) -> FirewallRule {
-        FirewallRule {
-            endpoint: crate::model::Endpoint {
-                id: "test-rule".into(),
-                address: "203.0.113.8/24".into(),
-                protocol,
-                ports: ports.map(str::to_string),
-                custom: true,
-            },
-            program: None,
-        }
-    }
-    #[test]
-    fn reset_only_touches_our_table_and_group() {
-        assert_eq!(
-            nft_script(&Request::Reset {}, true).unwrap(),
-            "delete table inet lobbylocker_v1\n"
-        );
-        assert_eq!(nft_script(&Request::Reset {}, false).unwrap(), "");
-        let script = powershell_script(&Request::Reset {}).unwrap();
-        assert!(script.contains(WINDOWS_GROUP));
-        assert!(!script.contains("netsh advfirewall reset"));
-    }
-    #[test]
-    fn any_protocol_with_ports_expands_to_tcp_and_udp() {
-        let request = Request::Apply {
-            rules: vec![rule(Protocol::Any, Some("27015-27060"))],
-        };
-        let script = nft_script(&request, true).unwrap();
-        assert!(script.contains("ip daddr 203.0.113.0/24 meta l4proto tcp tcp dport 27015-27060"));
-        assert!(script.contains("meta l4proto udp udp dport"));
-        assert!(!script.contains("flush ruleset"));
-        let mut windows = rule(Protocol::Any, Some("27015-27060"));
-        windows.program = Some(r"C:\Games\Example\game.exe".into());
-        let script = powershell_script(&Request::Apply {
-            rules: vec![windows],
-        })
-        .unwrap();
-        assert!(script.contains("-Protocol TCP"));
-        assert!(script.contains("-Protocol UDP"));
-    }
-    #[test]
-    fn helper_revalidates_untrusted_input() {
-        let mut bad = rule(Protocol::Udp, None);
-        bad.endpoint.id = "'; Invoke-Expression evil; '".into();
-        assert!(powershell_script(&Request::Apply { rules: vec![bad] }).is_err());
-    }
-
-    #[test]
-    fn windows_requires_program_scope_and_linux_refuses_to_widen_it() {
-        let mut scoped = rule(Protocol::Udp, None);
-        assert!(powershell_script(&Request::Apply {
-            rules: vec![scoped.clone()]
-        })
-        .is_err());
-        scoped.program = Some(r"D:\Games\Example\game.exe".into());
-        let request = Request::Apply {
-            rules: vec![scoped],
-        };
-        let script = powershell_script(&request).unwrap();
-        assert!(script.contains(r"-Program 'D:\Games\Example\game.exe'"));
-        assert!(script.contains("-Direction Outbound -Action Block"));
-        assert!(
-            script.find("Test-Path -LiteralPath").unwrap()
-                < script.find("New-NetFirewallRule").unwrap()
-        );
-        assert!(
-            script.find("New-NetFirewallRule").unwrap()
-                < script.find("$old | Remove-NetFirewallRule").unwrap()
-        );
-        assert!(script.contains("catch { $new | Remove-NetFirewallRule"));
-        assert!(nft_script(&request, true).is_err());
-        let clear = powershell_script(&Request::Apply { rules: vec![] }).unwrap();
-        assert!(clear.contains("$old | Remove-NetFirewallRule"));
-        assert!(!clear.contains("New-NetFirewallRule"));
-    }
-
-    #[test]
-    fn windows_program_literals_are_quoted_not_evaluated() {
-        let mut scoped = rule(Protocol::Tcp, Some("443"));
-        scoped.program = Some(r"C:\Games\O'Brien; $(evil)\العربية.exe".into());
-        let script = powershell_script(&Request::Apply {
-            rules: vec![scoped],
-        })
-        .unwrap();
-        assert!(script.contains(r"-Program 'C:\Games\O''Brien; $(evil)\العربية.exe'"));
-        assert!(script.contains(r"Test-Path -LiteralPath 'C:\Games\O''Brien; $(evil)\العربية.exe'"));
-        assert!(!script.contains("Invoke-Expression"));
-    }
-
-    #[test]
-    fn privileged_wire_rejects_unknown_fields_and_unscoped_legacy_requests() {
-        let mut scoped = rule(Protocol::Udp, None);
-        scoped.program = Some(r"C:\Games\game.exe".into());
-        let request = Request::Apply {
-            rules: vec![scoped],
-        };
-        let mut json = serde_json::to_value(&request).unwrap();
-        json["rules"][0]["command"] = serde_json::json!("evil");
-        assert!(serde_json::from_value::<Request>(json).is_err());
-        let legacy =
-            serde_json::json!({"action":"apply", "rules":[rule(Protocol::Udp, None).endpoint]});
-        assert!(serde_json::from_value::<Request>(legacy).is_err());
-        assert!(serde_json::from_str::<Request>(r#"{"action":"reset","extra":"evil"}"#).is_err());
-    }
-}
+#[path = "../tests/unit/firewall.rs"]
+mod tests;

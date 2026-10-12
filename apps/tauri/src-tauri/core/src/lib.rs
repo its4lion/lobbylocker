@@ -14,3 +14,11 @@ mod readback;
 pub mod store;
 
 pub type Result<T> = std::result::Result<T, String>;
+
+/// Unix seconds, or 0 if the system clock predates the epoch.
+pub(crate) fn now_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
