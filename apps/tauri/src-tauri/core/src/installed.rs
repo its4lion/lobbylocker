@@ -51,7 +51,7 @@ pub fn is_launcher_tool(game: &InstalledGame) -> bool {
 
 pub fn empty_game(id: String, name: &str) -> Result<Game> {
     let game = Game {
-        schema_version: 1, id, name: name.trim().into(), accent: "#a6d9b2".into(),
+        schema_version: 1, id, name: name.trim().into(),
         source: None, updated_at: None, executable_path: None,
         note: "User-configured game. Add server IPs in Advanced; installation metadata does not reveal server addresses. Windows uses the selected game executable; Linux rules apply system-wide.".into(),
         regions: vec![],
@@ -69,10 +69,10 @@ pub fn custom_game(
     ports: Option<String>,
 ) -> Result<Game> {
     let game = Game {
-        schema_version: 1, id, name: name.trim().into(), accent: "#a6d9b2".into(), source: None, updated_at: None, executable_path: None,
+        schema_version: 1, id, name: name.trim().into(), source: None, updated_at: None, executable_path: None,
         note: "User-configured game. IPs are supplied by you, not a verified server catalogue. Windows uses the selected game executable; Linux rules apply system-wide. Installing a game does not reveal its server addresses.".into(),
         regions: vec![Region {
-            id: "custom".into(), name: "My servers".into(), area: area.into(), probe_target: None, provider_scope: None,
+            id: "custom".into(), name: "My servers".into(), area: area.into(), probe_target: None, probe_custom: false, provider_scope: None,
             endpoints: vec![Endpoint { id: "custom-server".into(), address: normalize_address(address)?, protocol, ports, custom: true }],
         }],
     };

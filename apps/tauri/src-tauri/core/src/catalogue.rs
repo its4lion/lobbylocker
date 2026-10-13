@@ -44,6 +44,69 @@ pub fn has_official_feed(id: &str) -> bool {
     matches!(id, "overwatch2" | "cs2" | "deadlock")
 }
 
+/// Merge bundled defaults, preserving custom data and configured probes.
+pub fn merge_defaults(game: &mut Game, defaults: Game) {
+    // Valve's live relay list takes precedence over the bundled subset.
+    if matches!(game.id.as_str(), "cs2" | "deadlock") {
+        return;
+    }
+    let shipped: BTreeSet<String> = defaults
+        .regions
+        .iter()
+        .map(|region| region.id.clone())
+        .collect();
+    for region in &mut game.regions {
+        // A retired provider-fed region's addresses are regenerated, so only the
+        // user's own are worth keeping.
+        if !shipped.contains(&region.id) && region.provider_scope.is_some() {
+            region.endpoints.retain(|endpoint| endpoint.custom);
+        }
+    }
+    game.regions
+        .retain(|region| shipped.contains(&region.id) || region.endpoints.iter().any(|e| e.custom));
+
+    let mut endpoint_ids: BTreeSet<String> = game
+        .regions
+        .iter()
+        .flat_map(|region| region.endpoints.iter().map(|endpoint| endpoint.id.clone()))
+        .collect();
+    for region in defaults.regions {
+        if let Some(saved) = game.regions.iter_mut().find(|saved| saved.id == region.id) {
+            saved.name = region.name;
+            saved.area = region.area;
+            if saved.probe_target.is_none() && !saved.probe_custom {
+                saved.probe_target = region.probe_target;
+            }
+            if saved.provider_scope.is_none() && region.provider_scope.is_some() {
+                saved.provider_scope = region.provider_scope;
+            }
+            for endpoint in region.endpoints {
+                if let Some(saved_endpoint) = saved
+                    .endpoints
+                    .iter_mut()
+                    .find(|saved_endpoint| saved_endpoint.id == endpoint.id)
+                {
+                    if !saved_endpoint.custom {
+                        *saved_endpoint = endpoint;
+                    }
+                    continue;
+                }
+                let target_exists = saved.endpoints.iter().any(|saved_endpoint| {
+                    saved_endpoint.address == endpoint.address
+                        && saved_endpoint.protocol == endpoint.protocol
+                        && saved_endpoint.ports == endpoint.ports
+                });
+                if !target_exists && endpoint_ids.insert(endpoint.id.clone()) {
+                    saved.endpoints.push(endpoint);
+                }
+            }
+        } else {
+            endpoint_ids.extend(region.endpoints.iter().map(|endpoint| endpoint.id.clone()));
+            game.regions.push(region);
+        }
+    }
+}
+
 pub fn refresh(game: &Game) -> Result<Game> {
     if game.id == "overwatch2" {
         return refresh_overwatch(game);
@@ -112,9 +175,14 @@ pub fn refresh(game: &Game) -> Result<Game> {
             id: code.clone(),
             name: pop.desc,
             area: area(&code).into(),
-            probe_target: old
-                .and_then(|r| r.probe_target.clone())
-                .or_else(|| endpoints.first().map(|e| e.address.clone())),
+            probe_target: old.and_then(|r| r.probe_target.clone()).or_else(|| {
+                if old.is_some_and(|r| r.probe_custom) {
+                    None
+                } else {
+                    endpoints.first().map(|e| e.address.clone())
+                }
+            }),
+            probe_custom: old.is_some_and(|r| r.probe_custom),
             provider_scope: None,
             endpoints,
         });
@@ -247,7 +315,7 @@ fn update_google_regions(game: &Game, body: &[u8]) -> Result<Game> {
             .iter()
             .enumerate()
             .map(|(i, address)| Endpoint {
-                id: format!("gcp-{}-{i}", region.id),
+                id: format!("{}-{i}", region.id),
                 address: address.clone(),
                 protocol: Protocol::Udp,
                 ports: None,
@@ -260,7 +328,7 @@ fn update_google_regions(game: &Game, body: &[u8]) -> Result<Game> {
     }
     updated.source = Some(GOOGLE_CLOUD_URL.into());
     updated.updated_at = feed.creation_time;
-    updated.note = "Provider-managed entries are Google Cloud regional network ranges, NOT Blizzard-verified Overwatch server IPs. Blocks cover all applications' UDP traffic to those shared ranges. They do not cover every Blizzard/other-provider server or guarantee matchmaking location. Other saved regions are unchanged. Add a known responding IP for latency monitoring; no probe is guessed from a subnet.".into();
+    updated.note = "Community-maintained ranges; shared cloud ranges can affect other apps on Linux. Ping is an estimate; some servers may not reply.".into();
     updated.validate()?;
     Ok(updated)
 }

@@ -1,13 +1,57 @@
 //! Unit tests for the catalogue module.
 use super::*;
 
-fn template() -> Game {
+fn bundled_overwatch() -> Game {
     let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../../../data/games/overwatch2.json");
-    let mut game: Game = serde_json::from_slice(&std::fs::read(defaults).unwrap()).unwrap();
+    Game::from_json(&std::fs::read(defaults).unwrap()).unwrap()
+}
+
+fn template() -> Game {
+    let mut game = bundled_overwatch();
     game.regions
         .retain(|region| region.id == "gcp-europe-north1");
+    game.regions[0].probe_target = None;
     game
+}
+
+#[test]
+fn every_bundled_overwatch_server_has_an_explicit_ping_target() {
+    let game = bundled_overwatch();
+    game.validate().unwrap();
+    assert_eq!(game.regions.len(), 11);
+    assert!(game
+        .regions
+        .iter()
+        .all(|region| region.probe_target.is_some()));
+}
+
+#[test]
+fn bundled_probes_fill_missing_targets_but_preserve_edits_and_disabling() {
+    let mut defaults = template();
+    defaults.regions[0].probe_target = Some("203.0.113.1".into());
+    let mut saved = template();
+    let endpoints = saved.regions[0].endpoints.clone();
+
+    merge_defaults(&mut saved, defaults.clone());
+    assert_eq!(
+        saved.regions[0].probe_target,
+        defaults.regions[0].probe_target
+    );
+    assert_eq!(saved.regions[0].endpoints, endpoints);
+
+    saved.regions[0].probe_target = Some("203.0.113.9".into());
+    merge_defaults(&mut saved, defaults.clone());
+    assert_eq!(
+        saved.regions[0].probe_target.as_deref(),
+        Some("203.0.113.9")
+    );
+
+    saved.regions[0].probe_target = None;
+    saved.regions[0].probe_custom = true;
+    merge_defaults(&mut saved, defaults);
+    assert_eq!(saved.regions[0].probe_target, None);
+    assert!(saved.regions[0].probe_custom);
 }
 
 #[test]
@@ -22,6 +66,7 @@ fn google_refresh_filters_scopes_and_normalizes_both_families() {
     };
     game.regions[0].endpoints.push(custom.clone());
     game.regions[0].probe_target = Some("198.51.100.7".into());
+    let before = game.regions[0].endpoints.len();
     let body = br#"{"creationTime":"2026-10-03","prefixes":[
             {"ipv4Prefix":"203.0.113.8/24","service":"Google Cloud","scope":"europe-north1"},
             {"ipv4Prefix":"203.0.113.0/24","service":"Google Cloud","scope":"europe-north1"},
@@ -36,7 +81,7 @@ fn google_refresh_filters_scopes_and_normalizes_both_families() {
         game.regions[0].probe_target
     );
     assert_eq!(updated.source.as_deref(), Some(GOOGLE_CLOUD_URL));
-    assert_eq!(game.regions[0].endpoints.len(), 1);
+    assert_eq!(game.regions[0].endpoints.len(), before);
 }
 
 #[test]
@@ -54,6 +99,7 @@ fn google_refresh_preserves_unmanaged_regions() {
         name: "Manually maintained server".into(),
         area: "Custom".into(),
         probe_target: Some("198.51.100.7".into()),
+        probe_custom: true,
         provider_scope: None,
         endpoints: vec![Endpoint {
             id: "manual-server".into(),

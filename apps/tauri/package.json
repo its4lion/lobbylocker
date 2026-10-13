@@ -10,6 +10,7 @@
     "build": "pnpm icons && tauri build",
     "web:dev": "vite --host 127.0.0.1",
     "web:build": "vite build",
+    "fetch-cloud-ranges": "node scripts/fetch-cloud-ranges.mjs",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run"
   },

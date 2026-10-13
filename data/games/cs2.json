@@ -2,7 +2,6 @@
   "schemaVersion": 1,
   "id": "cs2",
   "name": "Counter-Strike 2",
-  "accent": "#e9b55f",
   "source": "https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=730",
   "updatedAt": "2026-10-02",
   "note": "Selected official Valve SDR locations, snapshot revision 1790374330. Refresh for the complete relay list. Shared with other Steam games. These are relay locations, not guaranteed match server locations. Add community server addresses under a region's Advanced section.",

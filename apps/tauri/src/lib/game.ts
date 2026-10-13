@@ -130,17 +130,18 @@ export const areas = [
   "Africa",
   "Custom",
 ];
+export function areasInOrder(regions: Region[]): string[] {
+  return [...new Set(regions.map((region) => region.area))].sort((a, b) => {
+    const ai = areas.indexOf(a),
+      bi = areas.indexOf(b);
+    return (
+      (ai < 0 ? areas.length : ai) - (bi < 0 ? areas.length : bi) ||
+      a.localeCompare(b)
+    );
+  });
+}
 export function gameAreas(game: Game): string[] {
-  return [...new Set(game.regions.map((region) => region.area))].sort(
-    (a, b) => {
-      const ai = areas.indexOf(a),
-        bi = areas.indexOf(b);
-      return (
-        (ai < 0 ? areas.length : ai) - (bi < 0 ? areas.length : bi) ||
-        a.localeCompare(b)
-      );
-    },
-  );
+  return areasInOrder(game.regions);
 }
 export function regionKey(game: Game, region: Region): string {
   return `${game.id}:${region.id}`;
@@ -171,6 +172,20 @@ export function areaSelection(
   };
 }
 
+export function regionSelection(
+  game: Game,
+  region: Region,
+  preferences?: Preferences,
+) {
+  const key = regionKey(game, region);
+  const available = region.endpoints.length > 0;
+  return {
+    key,
+    available,
+    checked: available && (preferences?.blockedRegions.includes(key) ?? false),
+  };
+}
+
 /** Saved switches describe desired configuration, never current OS blocking. */
 export function selectionDescription(
   checked: boolean,
@@ -194,6 +209,16 @@ export function blockDescription(state: RegionState): string {
     : state === "none"
       ? "Not blocked"
       : "";
+}
+
+export function regionBlockDescription(
+  status: Status | null,
+  game: Game,
+  region: Region,
+): string {
+  return region.endpoints.length
+    ? blockDescription(regionBlockState(status, regionKey(game, region)))
+    : "No targets configured";
 }
 
 /** Binary labels report block presence; don't imply complete coverage. */

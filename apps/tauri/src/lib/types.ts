@@ -12,6 +12,7 @@ export interface Region {
   name: string;
   area: string;
   probeTarget: string | null;
+  probeCustom?: boolean;
   providerScope?: string;
   endpoints: Endpoint[];
 }
@@ -19,7 +20,6 @@ export interface Game {
   schemaVersion: number;
   id: string;
   name: string;
-  accent: string;
   source: string | null;
   updatedAt: string | null;
   executablePath?: string | null;

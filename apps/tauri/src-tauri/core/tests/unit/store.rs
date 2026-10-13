@@ -137,3 +137,30 @@ fn background_refresh_markers_are_per_game_and_never_pin_refreshes_off() {
     assert_eq!(store.data_refresh_checked_at("cs2"), None);
     assert!(store.data_refresh_checked_at("deadlock").is_some());
 }
+
+#[test]
+fn a_failed_attempt_does_not_earn_the_daily_gap() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let store = Store::open(root.path().into(), &defaults).unwrap();
+
+    store.mark_data_refresh_attempted("overwatch2").unwrap();
+    assert!(store.data_refresh_attempted_at("overwatch2").is_some());
+    assert_eq!(
+        store.data_refresh_checked_at("overwatch2"),
+        None,
+        "a failed attempt must not count as a completed refresh"
+    );
+
+    store.mark_data_refresh_checked("overwatch2").unwrap();
+    assert!(store.data_refresh_checked_at("overwatch2").is_some());
+
+    for bad in [
+        r#"{"checkedAt":{},"attemptedAt":{"overwatch2":0}}"#,
+        r#"{"checkedAt":{},"attemptedAt":{"overwatch2":99999999999}}"#,
+        r#"{"checkedAt":{},"attemptedAt":{"../escape":1}}"#,
+    ] {
+        fs::write(root.path().join("data-refresh.json"), bad).unwrap();
+        assert_eq!(store.data_refresh_attempted_at("overwatch2"), None, "{bad}");
+    }
+}

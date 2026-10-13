@@ -24,12 +24,16 @@
         </p>{/if}
       <div class="flex flex-wrap justify-end gap-3">
         <Button
-          disabled={app.busy || app.updateInstalling}
+          disabled={app.busy || app.updateInstalling || app.updatePreview}
           onclick={() => app.installUpdate()}
           >{app.t(
             app.updateInstalling ? "Installing update…" : "Install update",
           )}</Button
         >
+        {#if app.updatePreview}<Button
+            variant="outline"
+            onclick={() => app.toggleUpdatePreview()}>{app.t("Cancel")}</Button
+          >{/if}
       </div>
     {:else}<p class="text-sm text-muted-foreground">
         {app.t(
@@ -43,7 +47,9 @@
       <div class="flex flex-wrap justify-end gap-3">
         <Button
           variant="outline"
-          disabled={app.busy || app.updateChecking}
+          disabled={app.busy ||
+            app.updateChecking ||
+            !app.status?.selfUpdateSupported}
           onclick={() => app.checkForUpdates()}
           >{app.t("Check for updates")}</Button
         >

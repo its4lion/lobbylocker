@@ -21,6 +21,9 @@ pub struct Store {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct DataRefresh {
     checked_at: BTreeMap<String, u64>,
+    /// Any attempt, so a dead feed is not retried on every page open.
+    #[serde(default)]
+    attempted_at: BTreeMap<String, u64>,
 }
 
 fn now_seconds() -> u64 {
@@ -112,22 +115,41 @@ impl Store {
     }
 
     pub fn mark_data_refresh_checked(&self, game_id: &str) -> Result<()> {
+        self.mark_data_refresh(game_id, true)
+    }
+
+    pub fn mark_data_refresh_attempted(&self, game_id: &str) -> Result<()> {
+        self.mark_data_refresh(game_id, false)
+    }
+
+    /// Last attempt, successful or not.
+    pub fn data_refresh_attempted_at(&self, game_id: &str) -> Option<u64> {
+        validate_id(game_id).ok()?;
+        let raw = fs::read(self.directory.join("data-refresh.json")).ok()?;
+        let checked = serde_json::from_slice::<DataRefresh>(&raw).ok()?;
+        let at = *checked.attempted_at.get(game_id)?;
+        (at > 0 && at <= now_seconds()).then_some(at)
+    }
+
+    fn mark_data_refresh(&self, game_id: &str, succeeded: bool) -> Result<()> {
         validate_id(game_id)?;
         let path = self.directory.join("data-refresh.json");
-        let mut checked = fs::read(&path)
+        let mut refresh = fs::read(&path)
             .ok()
             .and_then(|raw| serde_json::from_slice::<DataRefresh>(&raw).ok())
             .unwrap_or(DataRefresh {
                 checked_at: BTreeMap::new(),
+                attempted_at: BTreeMap::new(),
             });
+        let now = now_seconds();
         // A tampered file must not grow without bound.
-        checked
-            .checked_at
-            .retain(|_, at| *at > 0 && *at <= now_seconds());
-        checked
-            .checked_at
-            .insert(game_id.to_string(), now_seconds());
-        atomic_json(&path, &checked)
+        refresh.checked_at.retain(|_, at| *at > 0 && *at <= now);
+        refresh.attempted_at.retain(|_, at| *at > 0 && *at <= now);
+        refresh.attempted_at.insert(game_id.to_string(), now);
+        if succeeded {
+            refresh.checked_at.insert(game_id.to_string(), now);
+        }
+        atomic_json(&path, &refresh)
     }
 
     pub fn snapshot(&self) -> Result<Snapshot> {

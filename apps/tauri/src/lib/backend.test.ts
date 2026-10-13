@@ -62,6 +62,149 @@ beforeEach(() => {
 });
 
 describe("native bridge", () => {
+  it("serializes background icon reads with user actions without leaking native busy errors", async () => {
+    const loaded = emptyRead();
+    loaded.snapshot.games = [
+      { id: "example", name: "Example", executablePath: "/games/example.exe" },
+    ] as Game[];
+    loaded.snapshot.preferences.libraryGameIds = ["example"];
+    let finishIcons!: () => void;
+    let locked = false;
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return structuredClone(loaded);
+      if (command === "ensure_fresh_data") return;
+      if (locked) throw "Another operation is running. Please wait.";
+      if (command === "get_custom_icons") {
+        locked = true;
+        await new Promise<void>((resolve) => {
+          finishIcons = resolve;
+        });
+        locked = false;
+        return {};
+      }
+    });
+    const app = new Backend();
+    app.status = loaded;
+    const refresh = app.ensureFreshData("example");
+    await vi.waitFor(() => expect(locked).toBe(true));
+    expect(app.busy).toBe(false);
+    const change = app.command("set_language", { code: "ar" });
+    expect(app.busy).toBe(true);
+    await Promise.resolve();
+    expect(
+      native.invoke.mock.calls.some(([command]) => command === "set_language"),
+    ).toBe(false);
+    finishIcons();
+    await refresh;
+    expect(await change).toBe(true);
+    expect(app.error).toBe("");
+    expect(app.busy).toBe(false);
+  });
+
+  it("checks all or one configured server only on explicit request, without changing blocks", async () => {
+    const loaded = emptyRead();
+    loaded.snapshot.games = [
+      {
+        schemaVersion: 1,
+        id: "example",
+        name: "Example",
+        source: null,
+        updatedAt: null,
+        note: "",
+        regions: [
+          {
+            id: "a",
+            name: "A",
+            area: "Europe",
+            probeTarget: "203.0.113.1",
+            endpoints: [],
+          },
+          {
+            id: "b",
+            name: "B",
+            area: "Europe",
+            probeTarget: "203.0.113.2",
+            endpoints: [],
+          },
+          {
+            id: "c",
+            name: "C",
+            area: "Asia",
+            probeTarget: null,
+            endpoints: [],
+          },
+        ],
+      },
+    ];
+    loaded.snapshot.preferences.libraryGameIds = ["example"];
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return structuredClone(loaded);
+    });
+    const app = new Backend();
+    app.status = loaded;
+    app.selected = "example";
+    expect(native.invoke).not.toHaveBeenCalled();
+    expect(await app.checkPing()).toBe(true);
+    expect(native.invoke).toHaveBeenCalledWith("check_ping", {
+      gameId: "example",
+    });
+    expect(await app.checkPing("b")).toBe(true);
+    expect(native.invoke).toHaveBeenCalledWith("check_ping", {
+      gameId: "example",
+      regionId: "b",
+    });
+    expect(await app.checkPing("c")).toBe(false);
+    expect(await app.checkPing("missing")).toBe(false);
+    expect(
+      native.invoke.mock.calls.filter(([command]) => command === "check_ping"),
+    ).toHaveLength(2);
+    expect(app.status?.snapshot.preferences.blockedRegions).toEqual([]);
+    expect(
+      native.invoke.mock.calls.every(([command]) =>
+        ["check_ping", "get_status"].includes(command),
+      ),
+    ).toBe(true);
+  });
+
+  it("selects the first library game on startup and preserves valid choices on reload", async () => {
+    const loaded = emptyRead();
+    loaded.snapshot.games = [
+      { id: "cs2", name: "Counter-Strike 2" },
+      { id: "deadlock", name: "Deadlock" },
+    ] as Game[];
+    loaded.snapshot.preferences.libraryGameIds = ["cs2", "deadlock"];
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status" || command === "verify_firewall")
+        return structuredClone(loaded);
+      if (command === "get_languages") return { locales: [], warnings: [] };
+      if (command === "scan_games") return { games: [], warnings: [] };
+    });
+
+    const app = new Backend();
+    await app.initialize();
+    expect(app.selected).toBe("cs2");
+    app.selected = "deadlock";
+    await app.reload();
+    expect(app.selected).toBe("deadlock");
+
+    loaded.snapshot.preferences.libraryGameIds = ["cs2"];
+    await app.reload();
+    expect(app.selected).toBe("cs2");
+    loaded.snapshot.preferences.libraryGameIds = [];
+    await app.reload();
+    expect(app.selected).toBe("");
+    expect(
+      native.invoke.mock.calls.some(([command]) =>
+        [
+          "apply_rules",
+          "reset_rules",
+          "check_ping",
+          "set_preferences",
+        ].includes(command),
+      ),
+    ).toBe(false);
+  });
+
   it("checks automatically and installs a signed update only after confirmation", async () => {
     const loaded = emptyRead();
     loaded.selfUpdateSupported = true;
@@ -725,13 +868,17 @@ describe("native bridge", () => {
 });
 
 describe("background server data", () => {
-  it("refreshes an opened game once, silently, and never blocks the UI", async () => {
+  it("refreshes on each page open, deduplicates in-flight requests, and never blocks the UI", async () => {
+    let finishRefresh!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
     native.invoke.mockImplementation(async (command: string) => {
       if (command === "get_status") return status();
       if (command === "get_languages") return { locales: [], warnings: [] };
       if (command === "verify_firewall") return emptyRead();
       if (command === "scan_games") return { games: [], warnings: [] };
-      if (command === "ensure_fresh_data") return undefined;
+      if (command === "ensure_fresh_data") return pending;
       return undefined;
     });
     const app = new Backend();
@@ -743,7 +890,7 @@ describe("background server data", () => {
     // Startup must not prefetch every game.
     expect(fresh).toHaveLength(0);
 
-    await app.ensureFreshData("cs2");
+    const first = app.ensureFreshData("cs2");
     await app.ensureFreshData("cs2");
     await app.ensureFreshData("");
     expect(
@@ -751,6 +898,14 @@ describe("background server data", () => {
         (call) => call[0] === "ensure_fresh_data",
       ),
     ).toEqual([["ensure_fresh_data", { gameId: "cs2" }]]);
+    finishRefresh();
+    await first;
+    await app.ensureFreshData("cs2");
+    expect(
+      native.invoke.mock.calls.filter(
+        (call) => call[0] === "ensure_fresh_data",
+      ),
+    ).toHaveLength(2);
     // Never sets the shared busy flag, so Apply stays available.
     expect(app.busy).toBe(false);
     expect(app.error).toBe("");
@@ -764,6 +919,7 @@ describe("background server data", () => {
     });
     const app = new Backend();
     await expect(app.ensureFreshData("cs2")).resolves.toBeUndefined();
+    await expect(app.ensureFreshData("cs2")).resolves.toBeUndefined();
     expect(app.error).toBe("");
     expect(app.busy).toBe(false);
 
@@ -774,7 +930,7 @@ describe("background server data", () => {
       native.invoke.mock.calls.filter(
         (call) => call[0] === "ensure_fresh_data",
       ),
-    ).toHaveLength(1);
+    ).toHaveLength(2);
   });
 });
 
@@ -886,7 +1042,6 @@ describe("immediate firewall writes", () => {
         schemaVersion: 1,
         id: "overwatch2",
         name: "Overwatch 2",
-        accent: "#f7941d",
         source: null,
         updatedAt: null,
         note: "",

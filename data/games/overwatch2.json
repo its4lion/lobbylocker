@@ -2,16 +2,15 @@
   "schemaVersion": 1,
   "id": "overwatch2",
   "name": "Overwatch 2",
-  "accent": "#f28b55",
   "source": "https://www.gstatic.com/ipranges/cloud.json",
-  "updatedAt": null,
-  "note": "Google entries refresh directly from Google's public network feed and cover shared provider ranges, not verified Overwatch-only servers. Bundled Blizzard-owned ranges were ownership-checked with ARIN/RIPE on 2026-10-04; their Overwatch datacenter mapping is community-maintained, not an official Blizzard server list. Windows blocks only the selected game executable; Linux blocks system-wide. No probe IP is guessed from a subnet.",
+  "updatedAt": "2026-10-13T07:06:13.372435",
+  "note": "Community-maintained ranges; shared cloud ranges can affect other apps on Linux. Ping is an estimate; some servers may not reply.",
   "regions": [
     {
       "id": "blizzard-ams1",
-      "name": "Amsterdam · Blizzard network",
+      "name": "Netherlands",
       "area": "Europe",
-      "probeTarget": null,
+      "probeTarget": "137.221.78.60",
       "endpoints": [
         {
           "id": "blizzard-ams1-0",
@@ -23,10 +22,633 @@
       ]
     },
     {
-      "id": "blizzard-ord1",
-      "name": "Chicago · Blizzard network",
+      "id": "gcp-europe-north1",
+      "name": "Finland 2",
+      "area": "Europe",
+      "providerScope": "europe-north1",
+      "probeTarget": "34.88.118.28",
+      "endpoints": [
+        {
+          "id": "gcp-europe-north1-0",
+          "address": "179.193.128.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-1",
+          "address": "2600:1900:4150::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-2",
+          "address": "2600:1902:e0::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-3",
+          "address": "34.104.96.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-4",
+          "address": "34.124.32.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-5",
+          "address": "34.88.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-6",
+          "address": "35.203.232.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-7",
+          "address": "35.217.0.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-8",
+          "address": "35.220.26.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-9",
+          "address": "35.228.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-europe-north1-10",
+          "address": "35.242.26.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "gcp-me-central2",
+      "name": "Saudi Arabia",
+      "area": "Middle East",
+      "providerScope": "me-central2",
+      "probeTarget": "35.252.38.41",
+      "endpoints": [
+        {
+          "id": "gcp-me-central2-0",
+          "address": "2600:1900:5400::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-1",
+          "address": "2600:1902:1b0::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-2",
+          "address": "34.1.48.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-3",
+          "address": "34.152.102.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-4",
+          "address": "34.152.84.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-5",
+          "address": "34.157.122.128/25",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-6",
+          "address": "34.157.218.128/25",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-7",
+          "address": "34.166.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-8",
+          "address": "34.177.48.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-9",
+          "address": "34.177.70.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-10",
+          "address": "34.183.122.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-11",
+          "address": "34.183.69.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-12",
+          "address": "34.184.119.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-13",
+          "address": "34.184.68.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-14",
+          "address": "35.252.32.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-15",
+          "address": "8.228.192.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-me-central2-16",
+          "address": "8.230.64.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "gcp-us-east4",
+      "name": "USA East 2",
       "area": "North America",
-      "probeTarget": null,
+      "providerScope": "us-east4",
+      "probeTarget": "8.228.65.52",
+      "endpoints": [
+        {
+          "id": "gcp-us-east4-0",
+          "address": "136.107.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-1",
+          "address": "136.23.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-2",
+          "address": "136.70.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-3",
+          "address": "136.70.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-4",
+          "address": "136.75.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-5",
+          "address": "136.90.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-6",
+          "address": "2600:1900:4090::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-7",
+          "address": "2600:1902:250::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-8",
+          "address": "34.104.124.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-9",
+          "address": "34.104.60.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-10",
+          "address": "34.11.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-11",
+          "address": "34.118.252.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-12",
+          "address": "34.124.60.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-13",
+          "address": "34.127.188.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-14",
+          "address": "34.145.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-15",
+          "address": "34.150.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-16",
+          "address": "34.157.0.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-17",
+          "address": "34.157.128.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-18",
+          "address": "34.157.144.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-19",
+          "address": "34.157.16.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-20",
+          "address": "34.181.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-21",
+          "address": "34.182.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-22",
+          "address": "34.183.12.0/22",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-23",
+          "address": "34.183.130.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-24",
+          "address": "34.183.34.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-25",
+          "address": "34.183.60.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-26",
+          "address": "34.183.68.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-27",
+          "address": "34.184.12.0/22",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-28",
+          "address": "34.184.130.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-29",
+          "address": "34.184.32.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-30",
+          "address": "34.184.59.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-31",
+          "address": "34.184.67.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-32",
+          "address": "34.186.32.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-33",
+          "address": "34.186.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-34",
+          "address": "34.21.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-35",
+          "address": "34.4.32.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-36",
+          "address": "34.48.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-37",
+          "address": "34.85.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-38",
+          "address": "34.86.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-39",
+          "address": "35.186.160.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-40",
+          "address": "35.188.224.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-41",
+          "address": "35.194.64.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-42",
+          "address": "35.199.0.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-43",
+          "address": "35.212.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-44",
+          "address": "35.220.60.0/22",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-45",
+          "address": "35.221.0.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-46",
+          "address": "35.230.160.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-47",
+          "address": "35.234.176.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-48",
+          "address": "35.236.192.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-49",
+          "address": "35.242.60.0/22",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-50",
+          "address": "35.243.40.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-51",
+          "address": "35.245.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-52",
+          "address": "8.228.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-53",
+          "address": "8.234.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-us-east4-54",
+          "address": "8.234.2.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "blizzard-las1",
+      "name": "USA Southwest",
+      "area": "North America",
+      "probeTarget": "34.16.128.42",
+      "endpoints": [
+        {
+          "id": "blizzard-las1-0",
+          "address": "64.224.24.0/23",
+          "protocol": "any",
+          "ports": null,
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "blizzard-ord1",
+      "name": "USA Central",
+      "area": "North America",
+      "probeTarget": "8.34.210.23",
       "endpoints": [
         {
           "id": "blizzard-ord1-0",
@@ -45,30 +667,678 @@
       ]
     },
     {
-      "id": "blizzard-las1",
-      "name": "US Southwest · Blizzard network",
-      "area": "North America",
-      "probeTarget": null,
+      "id": "gcp-southamerica-east1",
+      "name": "Brazil 2",
+      "area": "South America",
+      "providerScope": "southamerica-east1",
+      "probeTarget": "34.39.128.0",
       "endpoints": [
         {
-          "id": "blizzard-las1-0",
-          "address": "64.224.24.0/23",
-          "protocol": "any",
+          "id": "gcp-southamerica-east1-0",
+          "address": "136.83.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-1",
+          "address": "2600:1900:40f0::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-2",
+          "address": "2600:1902:200::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-3",
+          "address": "34.104.80.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-4",
+          "address": "34.124.16.0/21",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-5",
+          "address": "34.151.0.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-6",
+          "address": "34.151.192.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-7",
+          "address": "34.39.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-8",
+          "address": "34.95.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-9",
+          "address": "35.198.0.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-10",
+          "address": "35.199.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-11",
+          "address": "35.215.192.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-12",
+          "address": "35.220.40.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-13",
+          "address": "35.235.0.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-14",
+          "address": "35.242.40.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-southamerica-east1-15",
+          "address": "35.247.192.0/18",
+          "protocol": "udp",
           "ports": null,
           "custom": false
         }
       ]
     },
     {
-      "id": "blizzard-syd2",
-      "name": "Sydney · Blizzard network",
-      "area": "Oceania",
-      "probeTarget": null,
+      "id": "gcp-asia-southeast1",
+      "name": "Singapore 2",
+      "area": "Asia",
+      "providerScope": "asia-southeast1",
+      "probeTarget": "34.1.128.4",
       "endpoints": [
         {
-          "id": "blizzard-syd2-0",
-          "address": "158.115.196.0/23",
-          "protocol": "any",
+          "id": "gcp-asia-southeast1-0",
+          "address": "136.110.0.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-1",
+          "address": "136.85.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-2",
+          "address": "136.92.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-3",
+          "address": "152.239.192.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-4",
+          "address": "179.67.0.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-5",
+          "address": "2600:1900:4080::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-6",
+          "address": "2600:1900:4334::/46",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-7",
+          "address": "2600:1902:90::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-8",
+          "address": "34.1.128.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-9",
+          "address": "34.1.192.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-10",
+          "address": "34.104.106.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-11",
+          "address": "34.104.58.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-12",
+          "address": "34.124.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-13",
+          "address": "34.124.42.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-14",
+          "address": "34.126.128.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-15",
+          "address": "34.126.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-16",
+          "address": "34.128.44.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-17",
+          "address": "34.128.60.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-18",
+          "address": "34.142.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-19",
+          "address": "34.143.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-20",
+          "address": "34.152.104.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-21",
+          "address": "34.153.232.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-22",
+          "address": "34.153.40.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-23",
+          "address": "34.157.210.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-24",
+          "address": "34.157.82.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-25",
+          "address": "34.157.88.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-26",
+          "address": "34.158.32.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-27",
+          "address": "34.177.72.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-28",
+          "address": "34.177.80.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-29",
+          "address": "34.177.96.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-30",
+          "address": "34.183.80.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-31",
+          "address": "34.184.131.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-32",
+          "address": "34.184.75.0/24",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-33",
+          "address": "34.2.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-34",
+          "address": "34.2.16.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-35",
+          "address": "34.21.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-36",
+          "address": "34.87.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-37",
+          "address": "34.87.128.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-38",
+          "address": "35.185.176.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-39",
+          "address": "35.186.144.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-40",
+          "address": "35.187.224.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-41",
+          "address": "35.197.128.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-42",
+          "address": "35.198.192.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-43",
+          "address": "35.213.128.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-44",
+          "address": "35.220.24.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-45",
+          "address": "35.234.192.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-46",
+          "address": "35.240.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-47",
+          "address": "35.242.24.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-southeast1-48",
+          "address": "35.247.128.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "gcp-asia-northeast1",
+      "name": "Japan 2",
+      "area": "Asia",
+      "providerScope": "asia-northeast1",
+      "probeTarget": "34.84.0.0",
+      "endpoints": [
+        {
+          "id": "gcp-asia-northeast1-0",
+          "address": "104.198.112.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-1",
+          "address": "104.198.80.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-2",
+          "address": "136.110.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-3",
+          "address": "2600:1900:4050::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-4",
+          "address": "2600:1902:40::/44",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-5",
+          "address": "34.104.128.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-6",
+          "address": "34.104.62.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-7",
+          "address": "34.127.190.0/23",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-8",
+          "address": "34.146.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-9",
+          "address": "34.153.192.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-10",
+          "address": "34.157.164.0/22",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-11",
+          "address": "34.157.192.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-12",
+          "address": "34.157.64.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-13",
+          "address": "34.180.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-14",
+          "address": "34.84.0.0/16",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-15",
+          "address": "34.85.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-16",
+          "address": "35.187.192.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-17",
+          "address": "35.189.128.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-18",
+          "address": "35.190.224.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-19",
+          "address": "35.194.96.0/19",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-20",
+          "address": "35.200.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-21",
+          "address": "35.213.0.0/17",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-22",
+          "address": "35.220.56.0/22",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-23",
+          "address": "35.221.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-24",
+          "address": "35.230.240.0/20",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-25",
+          "address": "35.242.56.0/22",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-26",
+          "address": "35.243.64.0/18",
+          "protocol": "udp",
+          "ports": null,
+          "custom": false
+        },
+        {
+          "id": "gcp-asia-northeast1-27",
+          "address": "8.237.0.0/18",
+          "protocol": "udp",
           "ports": null,
           "custom": false
         }
@@ -76,9 +1346,9 @@
     },
     {
       "id": "blizzard-tpe1",
-      "name": "Taiwan · Blizzard network",
+      "name": "Taiwan",
       "area": "Asia",
-      "probeTarget": null,
+      "probeTarget": "34.80.0.0",
       "endpoints": [
         {
           "id": "blizzard-tpe1-0",
@@ -97,100 +1367,19 @@
       ]
     },
     {
-      "id": "gcp-europe-north1",
-      "name": "Finland · Google Cloud",
-      "area": "Europe",
-      "providerScope": "europe-north1",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-europe-west4",
-      "name": "Netherlands · Google Cloud",
-      "area": "Europe",
-      "providerScope": "europe-west4",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-me-central2",
-      "name": "Saudi Arabia · Google Cloud",
-      "area": "Middle East",
-      "providerScope": "me-central2",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-me-central1",
-      "name": "Qatar · Google Cloud",
-      "area": "Middle East",
-      "providerScope": "me-central1",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-us-east4",
-      "name": "Virginia · Google Cloud",
-      "area": "North America",
-      "providerScope": "us-east4",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-us-west2",
-      "name": "Los Angeles · Google Cloud",
-      "area": "North America",
-      "providerScope": "us-west2",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-us-central1",
-      "name": "Iowa · Google Cloud",
-      "area": "North America",
-      "providerScope": "us-central1",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-southamerica-east1",
-      "name": "São Paulo · Google Cloud",
-      "area": "South America",
-      "providerScope": "southamerica-east1",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-asia-northeast1",
-      "name": "Tokyo · Google Cloud",
-      "area": "Asia",
-      "providerScope": "asia-northeast1",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-asia-southeast1",
-      "name": "Singapore · Google Cloud",
-      "area": "Asia",
-      "providerScope": "asia-southeast1",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-asia-east1",
-      "name": "Taiwan · Google Cloud",
-      "area": "Asia",
-      "providerScope": "asia-east1",
-      "probeTarget": null,
-      "endpoints": []
-    },
-    {
-      "id": "gcp-australia-southeast1",
-      "name": "Sydney · Google Cloud",
+      "id": "blizzard-syd2",
+      "name": "Australia 3",
       "area": "Oceania",
-      "providerScope": "australia-southeast1",
-      "probeTarget": null,
-      "endpoints": []
+      "probeTarget": "34.40.128.34",
+      "endpoints": [
+        {
+          "id": "blizzard-syd2-0",
+          "address": "158.115.196.0/23",
+          "protocol": "any",
+          "ports": null,
+          "custom": false
+        }
+      ]
     }
   ]
 }

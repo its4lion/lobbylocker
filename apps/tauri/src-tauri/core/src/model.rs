@@ -29,6 +29,8 @@ pub struct Region {
     pub name: String,
     pub area: String,
     pub probe_target: Option<String>,
+    #[serde(default)]
+    pub probe_custom: bool,
     /// Exact Google Cloud scope to refresh; absent for manual and Valve regions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_scope: Option<String>,
@@ -41,7 +43,6 @@ pub struct Game {
     pub schema_version: u32,
     pub id: String,
     pub name: String,
-    pub accent: String,
     pub source: Option<String>,
     pub updated_at: Option<String>,
     /// Never launched. Windows uses this executable for per-program firewall rules.
@@ -179,7 +180,7 @@ impl Game {
     /// Disk/import compatibility only: obsolete independent rules are ignored,
     /// never activated or exposed to IPC. All other unknown fields remain errors.
     pub fn from_json(bytes: &[u8]) -> Result<Self> {
-        read_compatible(bytes, &["rules"])
+        read_compatible(bytes, &["rules", "accent"])
     }
 
     pub fn area_keys(&self, area: &str) -> Vec<String> {

@@ -6,6 +6,8 @@ import {
   blockNote,
   selectionDescription,
   regionBlockState,
+  regionSelection,
+  regionBlockDescription,
   toggleKeys,
   libraryGames,
   libraryCandidates,
@@ -208,6 +210,105 @@ describe("locale files", () => {
 });
 
 describe("region selection", () => {
+  const locationGame = {
+    schemaVersion: 1,
+    id: "example",
+    name: "Example",
+    source: null,
+    updatedAt: null,
+    note: "",
+    regions: [
+      {
+        id: "ams",
+        name: "Amsterdam",
+        area: "Europe",
+        probeTarget: null,
+        endpoints: [
+          {
+            id: "e1",
+            address: "203.0.113.1",
+            protocol: "udp",
+            ports: null,
+            custom: false,
+          },
+        ],
+      },
+      {
+        id: "lhr",
+        name: "London",
+        area: "Europe",
+        probeTarget: null,
+        endpoints: [
+          {
+            id: "e2",
+            address: "203.0.113.2",
+            protocol: "udp",
+            ports: null,
+            custom: false,
+          },
+        ],
+      },
+      {
+        id: "empty",
+        name: "Empty",
+        area: "Europe",
+        probeTarget: null,
+        endpoints: [],
+      },
+    ],
+  } satisfies Game;
+
+  it("individual server switches leave other locations and games unchanged", () => {
+    const preferences = {
+      blockedRegions: ["example:ams", "other:ams", "example:empty"],
+    } as Preferences;
+    const amsterdam = regionSelection(
+      locationGame,
+      locationGame.regions[0],
+      preferences,
+    );
+    expect(amsterdam).toEqual({
+      key: "example:ams",
+      available: true,
+      checked: true,
+    });
+    expect(
+      regionSelection(locationGame, locationGame.regions[1], preferences)
+        .checked,
+    ).toBe(false);
+    expect(
+      regionSelection(locationGame, locationGame.regions[2], preferences),
+    ).toEqual({ key: "example:empty", available: false, checked: false });
+    expect(regionSelection(locationGame, locationGame.regions[0]).checked).toBe(
+      false,
+    );
+    expect(
+      toggleKeys(preferences.blockedRegions, [amsterdam.key], false),
+    ).toEqual(["other:ams", "example:empty"]);
+  });
+
+  it("individual server labels use OS readback, never the saved switch", () => {
+    const status = {
+      appliedCount: null,
+      regionStates: { "example:ams": "blocked" },
+    } as unknown as Status;
+    expect(
+      regionBlockDescription(status, locationGame, locationGame.regions[0]),
+    ).toBe("");
+    status.appliedCount = 0;
+    expect(
+      regionBlockDescription(status, locationGame, locationGame.regions[0]),
+    ).toBe("Not blocked");
+    status.appliedCount = 1;
+    status.regionStates = { "example:ams": "partial" };
+    expect(
+      regionBlockDescription(status, locationGame, locationGame.regions[0]),
+    ).toBe("Blocked");
+    expect(
+      regionBlockDescription(status, locationGame, locationGame.regions[2]),
+    ).toBe("No targets configured");
+  });
+
   it("preserves other games and deduplicates keys", () => {
     expect(toggleKeys(["other:a", "cs2:a"], ["cs2:a", "cs2:b"], true)).toEqual([
       "other:a",

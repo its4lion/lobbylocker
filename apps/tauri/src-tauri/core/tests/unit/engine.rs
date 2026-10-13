@@ -590,7 +590,13 @@ fn changing_library_folders_preserves_known_firewall_state_and_measurements() {
 fn manual_checks_report_missing_targets_without_network_access() {
     let root = tempfile::tempdir().unwrap();
     let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
-    let engine = Engine::new(Store::open(root.path().into(), &defaults).unwrap()).unwrap();
+    let store = Store::open(root.path().into(), &defaults).unwrap();
+    let mut game = store.default_game("overwatch2").unwrap();
+    for region in &mut game.regions {
+        region.probe_target = None;
+    }
+    store.save_game(&game).unwrap();
+    let engine = Engine::new(store).unwrap();
     assert!(engine
         .measure_latency("overwatch2", None)
         .unwrap_err()
@@ -636,6 +642,7 @@ fn explicit_overwatch_refresh_migration_adds_bundled_ranges_and_preserves_saved_
         name: "My server".into(),
         area: "Custom".into(),
         probe_target: Some("203.0.113.7".into()),
+        probe_custom: true,
         provider_scope: None,
         endpoints: vec![crate::model::Endpoint {
             id: "mine".into(),
@@ -646,7 +653,7 @@ fn explicit_overwatch_refresh_migration_adds_bundled_ranges_and_preserves_saved_
         }],
     });
 
-    merge_overwatch_defaults(&mut saved, defaults);
+    catalogue::merge_defaults(&mut saved, defaults);
 
     assert_eq!(
         saved
@@ -745,12 +752,95 @@ fn background_refresh_is_limited_to_feed_games_and_never_fetches_on_every_visit(
     assert!(engine.ensure_fresh_data("not-a-game").is_ok());
     assert_eq!(store.data_refresh_checked_at("not-a-game"), None);
 
-    // A feed game with no marker would attempt a request. Marking it fresh first
-    // proves the daily gate stops the second visit without any network access.
+    // A fresh marker avoids network access.
     store.mark_data_refresh_checked("cs2").unwrap();
     let before = store.snapshot().unwrap();
     assert!(engine.ensure_fresh_data("cs2").is_ok());
     let after = store.snapshot().unwrap();
     assert_eq!(after.games, before.games);
     assert_eq!(after.preferences, before.preferences);
+}
+
+#[test]
+fn bundled_ping_targets_reach_saved_games_during_the_feed_cooldown() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let store = Store::open(root.path().into(), &defaults).unwrap();
+    let mut saved = store.default_game("overwatch2").unwrap();
+    for region in &mut saved.regions {
+        region.probe_target = None;
+    }
+    store.save_game(&saved).unwrap();
+    store.mark_data_refresh_checked("overwatch2").unwrap();
+    let checked = store.data_refresh_checked_at("overwatch2");
+    let engine = Engine::new(store).unwrap();
+    let before = engine.runtime();
+
+    engine.ensure_fresh_data("overwatch2").unwrap();
+
+    let after = engine.runtime();
+    let game = after
+        .snapshot
+        .games
+        .iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    assert!(game
+        .regions
+        .iter()
+        .all(|region| region.probe_target.is_some()));
+    for (region, original) in game.regions.iter().zip(&saved.regions) {
+        assert_eq!(region.endpoints, original.endpoints);
+    }
+    assert_eq!(after.snapshot.preferences, before.snapshot.preferences);
+    assert_eq!(after.dirty, before.dirty);
+    assert_eq!(after.applied_count, before.applied_count);
+    assert!(after.samples.is_empty());
+    assert!(after.histories.is_empty());
+    let store = Store::open(root.path().into(), &defaults).unwrap();
+    assert_eq!(store.data_refresh_checked_at("overwatch2"), checked);
+    assert_eq!(store.snapshot().unwrap().games, after.snapshot.games);
+}
+
+#[test]
+fn revisiting_valve_games_keeps_the_refreshed_list_during_cooldown() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let store = Store::open(root.path().into(), &defaults).unwrap();
+    for id in ["deadlock", "cs2"] {
+        let mut game = store.default_game(id).unwrap();
+        game.regions[0].name = "Updated Amsterdam".into();
+        game.regions[0].endpoints[0].address = "203.0.113.9".into();
+        let mut chicago = game.regions[0].clone();
+        chicago.id = "ord".into();
+        chicago.name = "Chicago".into();
+        chicago.area = "North America".into();
+        for (i, endpoint) in chicago.endpoints.iter_mut().enumerate() {
+            endpoint.id = format!("ord-{i}");
+        }
+        game.regions.push(chicago);
+        game.updated_at = Some(format!("unix:{}", crate::now_seconds()));
+        store.save_game(&game).unwrap();
+        store.mark_data_refresh_checked(id).unwrap();
+    }
+    let engine = Engine::new(store).unwrap();
+    let before = engine.runtime();
+
+    for _ in 0..2 {
+        for id in ["deadlock", "cs2"] {
+            engine.ensure_fresh_data(id).unwrap();
+        }
+    }
+
+    let after = engine.runtime();
+    assert!(
+        after.snapshot.games == before.snapshot.games,
+        "Returning to Valve games must keep the refreshed relay lists"
+    );
+    assert_eq!(after.snapshot.preferences, before.snapshot.preferences);
+    assert_eq!(after.generation, before.generation);
+    let store = Store::open(root.path().into(), &defaults).unwrap();
+    assert!(store.snapshot().unwrap().games == before.snapshot.games);
 }

@@ -13,7 +13,7 @@
 
 {#if state === "blocked"}<span
     data-block-state={state}
-    class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-600 dark:text-amber-400"
+    class="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-600 dark:text-amber-400"
     title={app.t(blockNote(app.status, keys))}
     ><Shield class="size-3" />{app.t("Blocked")}</span
   >{/if}

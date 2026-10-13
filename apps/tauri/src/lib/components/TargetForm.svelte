@@ -7,8 +7,12 @@
   import { Plus } from "@lucide/svelte";
   import type { Backend } from "$lib/backend.svelte";
   import type { Endpoint, Game, Protocol } from "$lib/types";
-  let { app, game, area }: { app: Backend; game: Game; area: string } =
-    $props();
+  let {
+    app,
+    game,
+    area,
+    regionId,
+  }: { app: Backend; game: Game; area: string; regionId?: string } = $props();
   const prefix = $props.id();
   let address = $state("");
   let protocol = $state<Protocol>("udp");
@@ -27,7 +31,14 @@
       ports: ports.trim() || null,
       custom: true,
     };
-    if (attachment === "__new" || !regions.length) {
+    if (regionId) {
+      // The caller already scoped this form to one server location.
+      const scoped = updated.regions.find(
+        (r) => r.area === area && r.id === regionId,
+      );
+      if (!scoped) return;
+      scoped.endpoints.push(endpoint);
+    } else if (attachment === "__new" || !regions.length) {
       updated.regions.push({
         id: `custom-${crypto.randomUUID()}`,
         name: location.trim() || app.t("My servers"),
@@ -89,30 +100,33 @@
         />
       </div>
     </div>
-    <div class="grid gap-2">
-      <Label for={`${prefix}-region`}>{app.t("Server location")}</Label
-      ><ChoiceSelect
-        id={`${prefix}-region`}
-        bind:value={attachment}
-        disabled={app.busy}
-        options={[
-          {
-            value: "__default",
-            label:
-              regions[0]?.name ?? app.t("+ New server location in this region"),
-          },
-          ...regions.map((region) => ({
-            value: region.id,
-            label: region.name,
-          })),
-          {
-            value: "__new",
-            label: app.t("+ New server location in this region"),
-          },
-        ]}
-      />
-    </div>
-    {#if attachment === "__new" || !regions.length}<div class="grid gap-2">
+    {#if !regionId}<div class="grid gap-2">
+        <Label for={`${prefix}-region`}>{app.t("Server location")}</Label
+        ><ChoiceSelect
+          id={`${prefix}-region`}
+          bind:value={attachment}
+          disabled={app.busy}
+          options={[
+            {
+              value: "__default",
+              label:
+                regions[0]?.name ??
+                app.t("+ New server location in this region"),
+            },
+            ...regions.map((region) => ({
+              value: region.id,
+              label: region.name,
+            })),
+            {
+              value: "__new",
+              label: app.t("+ New server location in this region"),
+            },
+          ]}
+        />
+      </div>{/if}
+    {#if !regionId && (attachment === "__new" || !regions.length)}<div
+        class="grid gap-2"
+      >
         <Label for={`${prefix}-location`}
           >{app.t("New server location name")}</Label
         ><Input id={`${prefix}-location`} bind:value={location} />
@@ -123,7 +137,7 @@
   </fieldset>
   <p class="mt-4 text-xs text-muted-foreground">
     {app.t(
-      "Targets follow this region's toggle. Save does not send a ping or change the firewall; use Apply when ready.",
+      "Targets follow this server's toggle. Save does not send a ping or change the firewall; use Apply when ready.",
     )}
   </p>
 {/snippet}

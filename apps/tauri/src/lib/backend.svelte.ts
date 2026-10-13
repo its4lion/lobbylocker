@@ -4,6 +4,8 @@ import { check, type Update } from "@tauri-apps/plugin-updater";
 import { selectedLocale, translate } from "./i18n";
 import { libraryGames, libraryCandidates, blockGameIds } from "./game";
 import { missingPrograms } from "./firewall";
+import { pingRequest } from "./ping";
+import { Requests } from "./requests";
 import type {
   Connection,
   Game,
@@ -36,12 +38,14 @@ export class Backend {
   updateInstalling = $state(false);
   updateError = $state("");
   updateChecked = $state(false);
+  updatePreview = $state(false);
   private availableUpdate: Update | null = null;
+  private requests = new Requests(invoke);
   private iconPaths = "";
   private startupScanAttempted = false;
   private startupReadAttempted = false;
   private statusReloaded = false;
-  private freshDataChecked = new Set<string>();
+  private freshDataPending = new Set<string>();
   get games() {
     return libraryGames(
       this.status?.snapshot.games ?? [],
@@ -128,25 +132,23 @@ export class Backend {
     if (this.status?.selfUpdateSupported) void this.checkForUpdates(true);
   }
 
-  /**
-   * Refresh official server data for the game the user opened, so they never
-   * have to press refresh. Runs at most daily per game, never blocks the UI,
-   * and reloads the snapshot only when a feed returned new targets. Failures
-   * are silent on purpose: the manual refresh button still reports errors.
-   */
+  /** Refresh on page open; the backend limits feed requests to every 10 minutes. */
   async ensureFreshData(gameId: string) {
-    if (!isTauri() || !gameId || this.freshDataChecked.has(gameId)) return;
-    this.freshDataChecked.add(gameId);
+    if (!isTauri() || !gameId || this.freshDataPending.has(gameId)) return;
+    this.freshDataPending.add(gameId);
     try {
       await invoke("ensure_fresh_data", { gameId });
       await this.reload();
     } catch {
       // Never surfaced. Offline use is normal, not an error worth showing.
+    } finally {
+      this.freshDataPending.delete(gameId);
     }
   }
 
   async checkForUpdates(silent = false) {
     if (
+      this.updatePreview ||
       !isTauri() ||
       !this.status?.selfUpdateSupported ||
       this.updateChecking ||
@@ -168,8 +170,33 @@ export class Backend {
     }
   }
 
+  toggleUpdatePreview() {
+    if (
+      !import.meta.env.DEV ||
+      this.busy ||
+      this.updateChecking ||
+      this.updateInstalling
+    )
+      return;
+    this.updatePreview = !this.updatePreview;
+    this.updateVersion = this.updatePreview
+      ? "0.0.2"
+      : (this.availableUpdate?.version ?? "");
+    this.updateNotes = this.updatePreview
+      ? "LOCAL PREVIEW — nothing will be installed."
+      : (this.availableUpdate?.body ?? "");
+    this.updateChecked = this.updatePreview || !!this.availableUpdate;
+    this.updateError = "";
+  }
+
   async installUpdate() {
-    if (!this.availableUpdate || this.busy || this.updateInstalling) return;
+    if (
+      this.updatePreview ||
+      !this.availableUpdate ||
+      this.busy ||
+      this.updateInstalling
+    )
+      return;
     this.busy = true;
     this.updateInstalling = true;
     this.updateError = "";
@@ -199,7 +226,7 @@ export class Backend {
     const fingerprint = JSON.stringify(paths);
     if (fingerprint === this.iconPaths) return;
     this.customIcons = paths.length
-      ? await invoke<Record<string, string>>("get_custom_icons")
+      ? await this.requests.request<Record<string, string>>("get_custom_icons")
       : {};
     this.iconPaths = fingerprint;
   }
@@ -245,7 +272,7 @@ export class Backend {
         args,
       );
     }
-    return this.run(() => invoke(name, args));
+    return this.run(() => this.requests.request(name, args));
   }
   private async updateFirewall(
     command: string,
@@ -259,8 +286,8 @@ export class Backend {
         action === "read"
           ? this.readSnapshot()
           : args
-            ? invoke(command, args)
-            : invoke(command),
+            ? this.requests.request(command, args)
+            : this.requests.request(command),
       );
       if (!success && !this.statusReloaded && this.status) {
         // Without a fresh backend response, do not display stale OS status. A
@@ -296,7 +323,7 @@ export class Backend {
   private async readSnapshot() {
     // Native inspection tries existing privileges first, then requests OS
     // authentication if necessary. This command cannot mutate firewall rules.
-    const inspected = await invoke<Status>("verify_firewall", {
+    const inspected = await this.requests.request<Status>("verify_firewall", {
       elevated: true,
     });
     if (inspected) this.status = inspected;
@@ -383,7 +410,7 @@ export class Backend {
   private async detectGames() {
     this.scanning = true;
     try {
-      this.installed = await invoke<Scan>("scan_games");
+      this.installed = await this.requests.request<Scan>("scan_games");
       this.scanned = true;
       if (!this.game) this.selected = this.games[0]?.id ?? "";
     } finally {
@@ -400,7 +427,9 @@ export class Backend {
   async addLibrary() {
     let added = false;
     const success = await this.run(async () => {
-      const scan = await invoke<Scan | null>("select_game_library");
+      const scan = await this.requests.request<Scan | null>(
+        "select_game_library",
+      );
       if (scan) {
         this.installed = scan;
         this.scanned = true;
@@ -414,19 +443,30 @@ export class Backend {
   }
   removeLibrary(path: string) {
     return this.run(async () => {
-      this.installed = await invoke<Scan>("remove_game_library", { path });
+      this.installed = await this.requests.request<Scan>(
+        "remove_game_library",
+        { path },
+      );
       this.scanned = true;
     });
   }
   discover() {
     return this.run(async () => {
-      this.connections = await invoke<Connection[]>("discover_connections");
+      this.connections = await this.requests.request<Connection[]>(
+        "discover_connections",
+      );
     });
+  }
+  checkPing(regionId?: string) {
+    const request = pingRequest(this.game, regionId);
+    return request
+      ? this.command("check_ping", request)
+      : Promise.resolve(false);
   }
   async pickExecutable(): Promise<string | null> {
     let path: string | null = null;
     await this.run(async () => {
-      const selection = await invoke<{
+      const selection = await this.requests.request<{
         path: string;
         icon: string | null;
       } | null>("select_game_executable");
@@ -439,12 +479,14 @@ export class Backend {
   }
   create(input: NewGame) {
     return this.run(async () => {
-      this.selected = await invoke<string>("create_game", { input });
+      this.selected = await this.requests.request<string>("create_game", {
+        input,
+      });
     });
   }
   importGame() {
     return this.run(async () => {
-      const id = await invoke<string | null>("import_game");
+      const id = await this.requests.request<string | null>("import_game");
       if (id) {
         this.selected = id;
       }

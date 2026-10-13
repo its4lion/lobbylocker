@@ -1,31 +1,27 @@
 <script lang="ts">
-  import * as Card from "@lobbylocker/ui/components/card";
-  import { Button } from "@lobbylocker/ui/components/button";
+  import * as Collapsible from "@lobbylocker/ui/components/collapsible";
   import { Switch } from "@lobbylocker/ui/components/switch";
-  import { Minus, Plus } from "@lucide/svelte";
-  import ServerDetails from "./ServerDetails.svelte";
+  import { ChevronDown } from "@lucide/svelte";
+  import ServerCard from "./ServerCard.svelte";
   import TargetForm from "./TargetForm.svelte";
-  import {
-    areaSelection,
-    areaBlockDescription,
-    blockNote,
-    selectionDescription,
-    toggleKeys,
-  } from "$lib/game";
+  import { areaSelection, selectionDescription, toggleKeys } from "$lib/game";
   import type { Backend } from "$lib/backend.svelte";
   import type { Game } from "$lib/types";
   let {
     app,
     game,
     area,
-    advanced = false,
+    compact = false,
+    editing = false,
   }: {
     app: Backend;
     game: Game;
     area: string;
-    advanced?: boolean;
+    compact?: boolean;
+    editing?: boolean;
   } = $props();
-  let expanded = $state(true);
+  let open = $state(true);
+  const prefix = $props.id();
   const selection = $derived(
     app.status
       ? areaSelection(game, area, app.status.snapshot.preferences)
@@ -34,68 +30,70 @@
   const regions = $derived(game.regions.filter((r) => r.area === area));
 </script>
 
-<Card.Root class="area-card">
-  <Card.Header class="flex items-start justify-between gap-4"
-    ><div class="min-w-0 flex-1">
-      <Card.Title>{app.t(area)}</Card.Title><Card.Description
-        class="mt-2"
-        title={app.t(blockNote(app.status, selection.keys))}
-        >{app.t(
-          areaBlockDescription(app.status, selection.keys),
-        )}{#if app.status?.dirty && selection.selected > 0 && !selection.checked}<span
-            class="mt-1 block text-xs"
-            >{app.t(
-              selectionDescription(selection.checked, selection.selected),
-            )}</span
-          >{/if}</Card.Description
-      >
-    </div>
-    <div class="flex shrink-0 items-center gap-2">
-      <Switch
-        class="mt-0.5"
-        dir="ltr"
-        disabled={app.busy || !selection.keys.length}
-        aria-label={`${app.t("Block")} ${app.t(area)}`}
-        checked={selection.checked}
-        onCheckedChange={(checked) =>
-          app.preferences((p) => {
-            p.blockedRegions = toggleKeys(
-              p.blockedRegions,
-              selection.keys,
-              checked,
-            );
+<!-- One region group in both states: a bulk toggle, a collapsible heading, and
+     the individual server cards. Edit mode adds the per-server Edit buttons and
+     an Add IP button on the heading. -->
+<Collapsible.Root
+  bind:open
+  class="space-y-3"
+  aria-labelledby={`${prefix}-area`}
+  data-server-area={area}
+>
+  <div class="space-y-1">
+    <div class="flex items-center gap-3">
+      <h2 class="min-w-0 flex-1 text-sm font-medium">
+        <Collapsible.Trigger
+          class="flex w-full items-center gap-2 rounded-md py-1 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={app.t(open ? "Collapse {region}" : "Expand {region}", {
+            region: app.t(area),
           })}
-      />
-      {#if advanced}<Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={app.t(expanded ? "Collapse region" : "Expand region")}
-          aria-expanded={expanded}
-          onclick={() => (expanded = !expanded)}
-          >{#if expanded}<Minus class="size-4" />{:else}<Plus
-              class="size-4"
-            />{/if}</Button
-        >{/if}
-    </div></Card.Header
+        >
+          <ChevronDown
+            class={`size-3.5 shrink-0 text-muted-foreground transition-transform ${open ? "" : "-rotate-90 rtl:rotate-90"}`}
+          />
+          <span id={`${prefix}-area`} class="shrink-0">{app.t(area)}</span>
+          <span class="ms-1 h-px min-w-4 flex-1 bg-border" aria-hidden="true"
+          ></span>
+        </Collapsible.Trigger>
+      </h2>
+      {#if editing}<TargetForm {app} {game} {area} />{:else}<Switch
+          dir="ltr"
+          disabled={app.busy || !selection.keys.length}
+          aria-label={app.t("Block all servers in {region}", {
+            region: app.t(area),
+          })}
+          aria-describedby={selection.selected > 0 && !selection.checked
+            ? `${prefix}-selection`
+            : undefined}
+          checked={selection.checked}
+          onCheckedChange={(checked) =>
+            app.preferences((preferences) => {
+              preferences.blockedRegions = toggleKeys(
+                preferences.blockedRegions,
+                selection.keys,
+                checked,
+              );
+            })}
+        />{/if}
+    </div>
+    {#if !editing && selection.selected > 0 && !selection.checked}<p
+        id={`${prefix}-selection`}
+        class="text-[11px] text-muted-foreground"
+      >
+        {app.t(selectionDescription(selection.checked, selection.selected))}
+      </p>{/if}
+  </div>
+  <Collapsible.Content
+    class={compact
+      ? "grid grid-cols-[minmax(0,1fr)] items-start gap-2"
+      : "grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] items-start gap-3"}
   >
-  {#if advanced && expanded}<Card.Content>
-      <div class="space-y-4">
-        <div class="flex items-center gap-3">
-          <div class="h-px min-w-8 flex-1 bg-border"></div>
-          <TargetForm {app} {game} {area} />
-        </div>
-        <div class="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
-          {#each regions as region (region.id)}<ServerDetails
-              {app}
-              {game}
-              {region}
-            />{/each}
-        </div>
-      </div>
-    </Card.Content>
-  {:else if !selection.keys.length}<Card.Content
-      ><p class="text-xs text-muted-foreground">
-        {app.t("Add an IP in Advanced or refresh the list to enable blocking.")}
-      </p></Card.Content
-    >{/if}
-</Card.Root>
+    {#each regions as region (region.id)}<ServerCard
+        {app}
+        {game}
+        {region}
+        {compact}
+        {editing}
+      />{/each}
+  </Collapsible.Content>
+</Collapsible.Root>

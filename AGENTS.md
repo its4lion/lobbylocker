@@ -92,5 +92,5 @@ i18n:
 
 - `packages/ui/components.json` aliases `hooks` to `@lobbylocker/ui/hooks`, but `packages/ui/package.json` `exports` has no `./hooks` entry (and `packages/ui/src/hooks` does not exist). Adding a shadcn component that pulls in hooks will fail to resolve until the export is added.
 - `pnpm format:web` covers `apps/tauri`, `packages/ui`, and `data/locales/*.json` — **not** `data/games/*.json`. Do not reformat bundled game defaults.
-- Window is fixed at 760×560 minimum; layout regressions should be checked against that size.
+- Expanded layout has a 760×560 minimum; collapsed layout defaults to 420×800 with a 360×560 minimum. `lib/layout.ts` changes the native minimum at runtime and restores each layout's previous size without overriding configured maximum sizes. Check layout regressions at both minimum sizes.
 - Ping only ever runs from an explicit **Check ping** click. Never add a startup or timer-driven ping, and never let latency affect block selections.

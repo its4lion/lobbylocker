@@ -2,7 +2,6 @@
   "schemaVersion": 1,
   "id": "deadlock",
   "name": "Deadlock",
-  "accent": "#b7bca9",
   "source": "https://api.steampowered.com/ISteamApps/GetSDRConfig/v1/?appid=1422450",
   "updatedAt": "2026-10-02",
   "note": "Selected official Valve SDR locations, snapshot revision 1790374330. Refresh for all relay locations. Shared with CS2 and other Steam games. Relay latency is not necessarily match latency.",

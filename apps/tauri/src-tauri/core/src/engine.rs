@@ -15,52 +15,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-/// Minimum gap between silent startup refreshes of official server feeds.
-const DATA_REFRESH_INTERVAL_SECONDS: u64 = 24 * 60 * 60;
-
-fn merge_overwatch_defaults(game: &mut Game, defaults: Game) {
-    let mut endpoint_ids: BTreeSet<String> = game
-        .regions
-        .iter()
-        .flat_map(|region| region.endpoints.iter().map(|endpoint| endpoint.id.clone()))
-        .collect();
-    for region in defaults.regions {
-        if let Some(saved) = game.regions.iter_mut().find(|saved| saved.id == region.id) {
-            // Older bundled Google templates predate providerScope. Adding the
-            // trusted mapping lets explicit refresh update them while preserving
-            // custom endpoints.
-            if saved.provider_scope.is_none() && region.provider_scope.is_some() {
-                saved.provider_scope = region.provider_scope;
-            }
-            // Explicit refresh also migrates newly bundled trusted ranges into
-            // existing regions and updates older bundled entries by their stable
-            // IDs. Custom endpoints are never replaced.
-            for endpoint in region.endpoints {
-                if let Some(saved_endpoint) = saved
-                    .endpoints
-                    .iter_mut()
-                    .find(|saved_endpoint| saved_endpoint.id == endpoint.id)
-                {
-                    if !saved_endpoint.custom {
-                        *saved_endpoint = endpoint;
-                    }
-                    continue;
-                }
-                let target_exists = saved.endpoints.iter().any(|saved_endpoint| {
-                    saved_endpoint.address == endpoint.address
-                        && saved_endpoint.protocol == endpoint.protocol
-                        && saved_endpoint.ports == endpoint.ports
-                });
-                if !target_exists && endpoint_ids.insert(endpoint.id.clone()) {
-                    saved.endpoints.push(endpoint);
-                }
-            }
-        } else {
-            endpoint_ids.extend(region.endpoints.iter().map(|endpoint| endpoint.id.clone()));
-            game.regions.push(region);
-        }
-    }
-}
+/// Gap between silent refreshes of official server feeds.
+const DATA_REFRESH_INTERVAL_SECONDS: u64 = 10 * 60;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PendingKeys {
@@ -372,31 +328,14 @@ impl Engine {
         Ok(())
     }
 
-    /// Silent background refresh for the game the user just opened.
-    ///
-    /// Only games with an official feed are eligible, at most once a day each, and
-    /// only when the user actually opens that game's page. Bundled defaults are
-    /// never merged here (that stays an explicit refresh), failures are swallowed,
-    /// and the attempt is recorded before any request so an unreachable feed cannot
-    /// cause a request on every visit.
+    /// Silent refresh on page open, at most once every 10 minutes.
     pub fn ensure_fresh_data(&self, game_id: &str) -> Result<()> {
         if !catalogue::has_official_feed(game_id) {
             return Ok(());
         }
-        if self
-            .store
-            .data_refresh_checked_at(game_id)
-            .is_some_and(|at| {
-                crate::now_seconds().saturating_sub(at) < DATA_REFRESH_INTERVAL_SECONDS
-            })
-        {
-            return Ok(());
-        }
-        self.store.mark_data_refresh_checked(game_id)?;
-        // Serialize with every other mutation so a late response cannot overwrite
-        // edits, apply, or reset made while the request was in flight.
+        // Serialize with edits so a late response cannot overwrite them.
         let _operation = self.operation.lock().map_err(|e| e.to_string())?;
-        let game = match self
+        let original = match self
             .runtime()
             .snapshot
             .games
@@ -406,16 +345,38 @@ impl Engine {
             Some(game) => game,
             None => return Ok(()),
         };
-        let Ok(updated) = catalogue::refresh(&game) else {
-            return Ok(());
-        };
-        if updated == game || self.store.save_game(&updated).is_err() {
-            return Ok(());
+        let mut game = original.clone();
+        if let Ok(defaults) = self.store.default_game(game_id) {
+            catalogue::merge_defaults(&mut game, defaults);
         }
-        let mut state = self.state.lock().map_err(|e| e.to_string())?;
-        state.snapshot = self.store.snapshot()?;
-        state.generation += 1;
-        Self::reconcile(&mut state);
+        let now = crate::now_seconds();
+        let recent = self
+            .store
+            .data_refresh_checked_at(game_id)
+            .is_some_and(|at| now.saturating_sub(at) < DATA_REFRESH_INTERVAL_SECONDS)
+            || self
+                .store
+                .data_refresh_attempted_at(game_id)
+                .is_some_and(|at| now.saturating_sub(at) < DATA_REFRESH_INTERVAL_SECONDS);
+        // Bundled corrections survive feed cooldowns and failures.
+        let fetched = if recent {
+            None
+        } else {
+            self.store.mark_data_refresh_attempted(game_id)?;
+            catalogue::refresh(&game).ok()
+        };
+        let succeeded = fetched.is_some();
+        let updated = fetched.unwrap_or(game);
+        if updated != original {
+            self.store.save_game(&updated)?;
+            let mut state = self.state.lock().map_err(|e| e.to_string())?;
+            state.snapshot = self.store.snapshot()?;
+            state.generation += 1;
+            Self::reconcile(&mut state);
+        }
+        if succeeded {
+            self.store.mark_data_refresh_checked(game_id)?;
+        }
         Ok(())
     }
 
@@ -429,11 +390,8 @@ impl Engine {
             .into_iter()
             .find(|g| g.id == game_id)
             .ok_or("Game not found.")?;
-        if game.id == "overwatch2" {
-            // Upgrade bundled targets only on an explicit refresh, never on startup.
-            // Existing regions, custom endpoints, and selections remain untouched.
-            let defaults = self.store.default_game(game_id)?;
-            merge_overwatch_defaults(&mut game, defaults);
+        if let Ok(defaults) = self.store.default_game(game_id) {
+            catalogue::merge_defaults(&mut game, defaults);
         }
         let updated = catalogue::refresh(&game)?;
         self.store.save_game(&updated)?;
@@ -607,7 +565,7 @@ impl Engine {
         }
         if !game.regions.iter().any(|r| r.probe_target.is_some()) {
             return Err(
-                "No ping targets configured. Open Advanced and add a responding probe IP.".into(),
+                "No ping targets configured. Open Edit mode and add a responding probe IP.".into(),
             );
         }
         let samples = latency::measure(&[game]);
