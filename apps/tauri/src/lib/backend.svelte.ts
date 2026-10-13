@@ -335,16 +335,21 @@ export class Backend {
   }
   preferences(change: (preferences: Preferences) => void) {
     if (!this.status || this.busy) return Promise.resolve(false);
-    const preferences = structuredClone(
+    // An independent plain copy: the rollback must not share structure with the
+    // live preferences, or a later mutation would rewrite the restore value.
+    const previous = structuredClone(
       $state.snapshot(this.status.snapshot.preferences),
-    );
+    ) as Preferences;
+    const preferences = structuredClone(previous);
     const before = JSON.stringify(preferences.blockedRegions);
     change(preferences);
     const blocksChanged = JSON.stringify(preferences.blockedRegions) !== before;
     return this.command("set_preferences", { preferences }).then((saved) => {
       // Only a toggle writes rules. Adding targets or refreshing server data
       // must never change the firewall on its own.
-      if (saved && blocksChanged) void this.writeBlocks();
+      if (saved && blocksChanged) {
+        void this.writeBlocks(previous);
+      }
       return saved;
     });
   }
@@ -359,11 +364,17 @@ export class Backend {
    * Never runs while another operation holds the guard, and never for a game
    * that still needs an executable, so a pending choice cannot silently reach
    * the firewall in a partial state.
+   *
+   * A rejected administrator prompt leaves the firewall untouched, so the
+   * selection is put back: a saved switch must never claim a state the
+   * operating system does not have.
    */
-  private async writeBlocks() {
+  private async writeBlocks(rollback?: Preferences) {
     if (this.busy || !this.status?.dirty) return;
     if (missingPrograms(this.status).length) return;
-    await this.apply();
+    if (await this.apply()) return;
+    if (!rollback || this.busy) return;
+    await this.command("set_preferences", { preferences: rollback });
   }
 
   saveGame(game: Game) {

@@ -816,6 +816,50 @@ describe("immediate firewall writes", () => {
     expect(app.error).toBe("");
   });
 
+  it("puts the selection back when the administrator prompt is rejected", async () => {
+    const saved: string[][] = [];
+    const loaded = blocked();
+    native.invoke.mockImplementation(
+      async (command: string, args?: Record<string, unknown>) => {
+        if (command === "get_status") return loaded;
+        if (command === "verify_firewall") return emptyRead();
+        if (command === "set_preferences") {
+          saved.push([
+            ...(args?.preferences as { blockedRegions: string[] })
+              .blockedRegions,
+          ]);
+          loaded.dirty = true;
+          loaded.snapshot.preferences.blockedRegions = [
+            ...(args?.preferences as { blockedRegions: string[] })
+              .blockedRegions,
+          ];
+          return undefined;
+        }
+        if (command === "apply_rules") {
+          // The user declines: nothing was written to the firewall.
+          throw new Error("Firewall operation failed or UAC was cancelled");
+        }
+        return undefined;
+      },
+    );
+    const app = new Backend();
+    app.status = loaded;
+
+    // Was blocked, user switches it off, the prompt is rejected.
+    await app.preferences((p) => (p.blockedRegions = []));
+    await vi.waitFor(() => expect(saved).toHaveLength(2));
+
+    expect(saved[0]).toEqual([]);
+    expect(saved[1]).toEqual(["overwatch2:gcp-europe-north1"]);
+    await vi.waitFor(() =>
+      expect(app.status?.snapshot.preferences.blockedRegions).toEqual([
+        "overwatch2:gcp-europe-north1",
+      ]),
+    );
+    // The switch reads from the saved selection, so it goes back on by itself.
+    expect(app.busy).toBe(false);
+  });
+
   it("writes nothing when the change did not touch blocking selections", async () => {
     const loaded = blocked();
     native.invoke.mockImplementation(async (command: string) => {
