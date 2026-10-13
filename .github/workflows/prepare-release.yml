@@ -5,12 +5,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version without the v prefix (for example, 0.0.1)
+        description: Version to bump to, without the v prefix (for example, 0.0.2)
         required: true
         type: string
 
 concurrency:
-  group: prepare-release-${{ inputs.version }}
+  group: prepare-release-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -21,11 +21,22 @@ env:
 
 jobs:
   validate:
-    name: Validate version
+    name: Bump and validate version
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
+      - name: Require a branch
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" != "branch" ]]; then
+            echo "Prepare Release must run from a branch so the version bump can be committed." >&2
+            exit 1
+          fi
       - uses: actions/checkout@v7
-      - name: Validate all version metadata
+      - name: Bump and validate all version metadata
         shell: bash
         run: |
           python3 <<'PY'
@@ -33,10 +44,25 @@ jobs:
           import os
           import re
           import tomllib
+          from pathlib import Path
 
           version = os.environ["VERSION"]
           if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
               raise SystemExit(f"Invalid stable semantic version: {version}")
+
+          current = json.loads(Path("package.json").read_text(encoding="utf-8"))["version"]
+          if tuple(map(int, version.split("."))) < tuple(map(int, current.split("."))):
+              raise SystemExit(f"Cannot lower the version from {current} to {version}")
+
+          updates = {}
+
+          def bump(file, pattern, expected_count=1):
+              text = Path(file).read_text(encoding="utf-8")
+              updated, count = re.subn(pattern, lambda match: f'{match[1]}"{version}"', text)
+              if count != expected_count:
+                  raise SystemExit(f"{file}: expected {expected_count} version entries, found {count}")
+              updates[file] = updated
+              return updated
 
           json_files = [
               "package.json",
@@ -45,18 +71,22 @@ jobs:
               "apps/tauri/src-tauri/tauri.conf.json",
           ]
           for file in json_files:
-              with open(file, "rb") as handle:
-                  actual = json.load(handle)["version"]
+              updated = bump(file, r'(?m)^([ \t]*"version"[ \t]*:[ \t]*)"[^"\n]*"')
+              actual = json.loads(updated)["version"]
               if actual != version:
                   raise SystemExit(f"{file} has version {actual}, expected {version}")
 
-          with open("Cargo.toml", "rb") as handle:
-              actual = tomllib.load(handle)["workspace"]["package"]["version"]
+          updated = bump("Cargo.toml", r'(?m)^(\[workspace\.package\]\nversion = )"[^"\n]*"')
+          actual = tomllib.loads(updated)["workspace"]["package"]["version"]
           if actual != version:
               raise SystemExit(f"Cargo.toml has version {actual}, expected {version}")
 
-          with open("Cargo.lock", "rb") as handle:
-              packages = tomllib.load(handle)["package"]
+          updated = bump(
+              "Cargo.lock",
+              r'(?m)^(\[\[package\]\]\nname = "(?:lobbylocker-core|lobbylocker-tauri)"\nversion = )"[^"\n]*"',
+              expected_count=2,
+          )
+          packages = tomllib.loads(updated)["package"]
           workspace = {
               package["name"]: package["version"]
               for package in packages
@@ -65,6 +95,11 @@ jobs:
           expected = {"lobbylocker-core": version, "lobbylocker-tauri": version}
           if workspace != expected:
               raise SystemExit(f"Cargo.lock workspace versions are {workspace}, expected {expected}")
+
+          # Preserve formatting and dependency versions; write only after every file validates.
+          for file, updated in updates.items():
+              Path(file).write_text(updated, encoding="utf-8")
+          print(f"Updated all version metadata to {version}")
           PY
       - name: Ensure the tag and release do not exist
         env:
@@ -79,6 +114,19 @@ jobs:
             echo "Release v${VERSION} already exists." >&2
             exit 1
           fi
+      - name: Commit and push version bump
+        id: commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json apps/tauri/package.json packages/ui/package.json \
+            apps/tauri/src-tauri/tauri.conf.json Cargo.toml Cargo.lock
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: bump version to ${VERSION}"
+            git push origin "HEAD:${GITHUB_REF}"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
   source-quality:
     name: Format, typecheck, and frontend tests
@@ -86,6 +134,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -108,6 +158,8 @@ jobs:
       - name: Install system dependencies
         run: pacman -Syu --noconfirm git gtk3 webkit2gtk-4.1 librsvg pkgconf nodejs pnpm
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - uses: dtolnay/rust-toolchain@1.90.0
         with:
           components: clippy
@@ -123,6 +175,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -147,6 +201,8 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -170,6 +226,8 @@ jobs:
       - name: Install build dependencies
         run: pacman -Syu --noconfirm git gtk3 webkit2gtk-4.1 librsvg pkgconf nodejs pnpm rustup nftables polkit namcap
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - name: Install Rust toolchain
         run: rustup default 1.90.0
       - run: pnpm install --frozen-lockfile
@@ -218,6 +276,8 @@ jobs:
     environment: release-signing
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -248,6 +308,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
@@ -278,6 +340,8 @@ jobs:
     environment: release-signing
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -306,6 +370,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
       - uses: actions/download-artifact@v8
         with:
           path: release-assets
@@ -317,6 +383,7 @@ jobs:
       - name: Create tag and draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.validate.outputs.sha }}
         shell: bash
         run: |
           args=(
@@ -324,7 +391,7 @@ jobs:
             release-assets/*
             --draft
             --generate-notes
-            --target "${GITHUB_SHA}"
+            --target "${RELEASE_SHA}"
             --title "LobbyLocker v${VERSION}"
           )
           gh release create "${args[@]}"
