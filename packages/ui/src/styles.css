@@ -71,7 +71,10 @@
   --secondary: --alpha(var(--primary)/10%);
   --secondary-foreground: oklch(0.9027 0.0137 60.56);
 
-  --muted: var(--background);
+  /* Card, not background: pointing this at background made the tab track
+     and the active pill the same colour, and every other bg-muted
+     surface invisible. */
+  --muted: var(--card);
   --muted-foreground: oklch(0.7262 0.0037 67.77);
 
   --accent: var(--color-zinc-700);
@@ -146,4 +149,13 @@
   html {
     @apply font-sans;
   }
+}
+
+/* The stock tab trigger paints the active tab with input/30, which is too faint
+   to separate it from the track on a near-black background. Veil wants the
+   accent surface there. Two reasons this sits outside @layer components: the
+   stock rule carries :is(.dark *) and wins on specificity, and Tailwind shakes
+   that layer down to candidates it finds in the source, which drops this. */
+.dark [data-active="true"]:not([data-active="false"]) {
+  background-color: var(--accent);
 }
