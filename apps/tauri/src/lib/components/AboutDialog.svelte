@@ -3,12 +3,20 @@
   import { Button } from "@lobbylocker/ui/components/button";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { Backend } from "$lib/backend.svelte";
+  import lockupDark from "$lib/assets/brand/lobbylocker-lockup-on-dark.svg?url";
+  import lockupLight from "$lib/assets/brand/lobbylocker-lockup-on-light.svg?url";
 
   let {
     app,
     version,
+    dark,
     open = $bindable(false),
-  }: { app: Backend; version: string; open?: boolean } = $props();
+  }: {
+    app: Backend;
+    version: string;
+    dark: boolean;
+    open?: boolean;
+  } = $props();
   let linkError = $state("");
 
   async function visit(url: string) {
@@ -24,7 +32,15 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-md" onOpenAutoFocus={() => (linkError = "")}>
     <Dialog.Header class="items-center text-center sm:text-center">
-      <Dialog.Title><span dir="ltr">LobbyLocker</span></Dialog.Title>
+      <img
+        src={dark ? lockupDark : lockupLight}
+        alt=""
+        class="mb-4 h-14 w-auto"
+      />
+      <!-- The lockup already spells the name; keep it for screen readers. -->
+      <Dialog.Title class="sr-only"
+        ><span dir="ltr">LobbyLocker</span></Dialog.Title
+      >
       <Dialog.Description>
         {app.t("A game server region blocker for Windows and Linux.")}
       </Dialog.Description>

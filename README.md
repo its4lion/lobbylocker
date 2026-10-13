@@ -1,13 +1,36 @@
-# LobbyLocker
+<div align="center">
+  <img
+    src="apps/tauri/src/lib/assets/brand/lobbylocker-icon.svg"
+    alt="LobbyLocker"
+    width="88"
+  />
 
-[![Tests](https://github.com/its4lion/LobbyLocker/actions/workflows/tests.yml/badge.svg)](https://github.com/its4lion/lobbylocker/actions/workflows/tests.yml)
-[![Clippy](https://github.com/its4lion/LobbyLocker/actions/workflows/clippy.yml/badge.svg)](https://github.com/its4lion/lobbylocker/actions/workflows/clippy.yml)
-[![Release](https://img.shields.io/github/v/release/its4lion/lobbylocker)](https://github.com/its4lion/lobbylocker/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+  <h1>LobbyLocker</h1>
 
-LobbyLocker is a game server region blocker for Windows and Linux. Choose the
-regions you want to avoid, apply the changes, and lobbylocker manages its own
-operating-system firewall rules.
+  <p><strong>Leave the lobby. Keep your latency.</strong><br />
+  A lightweight game server region blocker for Linux and Windows.</p>
+
+  <p>
+    <a href="https://github.com/its4lion/LobbyLocker/releases"><strong>Download</strong></a> ·
+    <a href="#how-to-use">Getting started</a> ·
+    <a href="#important-behavior">How it works</a> ·
+    <a href="#troubleshooting">Troubleshooting</a> ·
+    <a href="#development">Contribute</a>
+  </p>
+
+  <p>
+    <a href="https://github.com/its4lion/LobbyLocker/actions/workflows/tests.yml"><img src="https://github.com/its4lion/LobbyLocker/actions/workflows/tests.yml/badge.svg" alt="Tests" /></a>
+    <a href="https://github.com/its4lion/LobbyLocker/actions/workflows/clippy.yml"><img src="https://github.com/its4lion/LobbyLocker/actions/workflows/clippy.yml/badge.svg" alt="Clippy" /></a>
+    <a href="https://github.com/its4lion/LobbyLocker/releases"><img src="https://img.shields.io/github/v/release/its4lion/lobbylocker" alt="Release" /></a>
+    <a href="https://img.shields.io/badge/Built_with-Rust-1ed760"><img src="https://img.shields.io/badge/Built_with-Rust-1ed760" alt="Built with Rust" /></a>
+    <a href="https://img.shields.io/badge/Linux_%C2%B7_Windows-24292f"><img src="https://img.shields.io/badge/Linux_%C2%B7_Windows-24292f" alt="Linux and Windows" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-1ed760" alt="MIT license" /></a>
+  </p>
+</div>
+
+LobbyLocker blocks the game server regions you would rather not play on. Pick
+the regions you want to avoid and LobbyLocker manages its own operating-system
+firewall rules — no game files touched, no code injected, nothing rerouted.
 
 > [!WARNING]
 > LobbyLocker is still in beta. Server addresses can change, Windows builds are

@@ -9,7 +9,9 @@
   import * as Dialog from "@lobbylocker/ui/components/dialog";
   import { Button } from "@lobbylocker/ui/components/button";
   import { ChoiceSelect } from "@lobbylocker/ui/components/choice-select";
-  import { Gamepad2, Moon, Sun } from "@lucide/svelte";
+  import { Moon, Sun } from "@lucide/svelte";
+  import lockupDark from "$lib/assets/brand/lobbylocker-lockup-on-dark.svg?url";
+  import lockupLight from "$lib/assets/brand/lobbylocker-lockup-on-light.svg?url";
   import GameLibrary from "$lib/components/GameLibrary.svelte";
   import ManageGames from "$lib/components/ManageGames.svelte";
   import CustomGame from "$lib/components/CustomGame.svelte";
@@ -116,8 +118,12 @@
   <header
     class="flex flex-wrap items-center justify-between gap-4 border-b px-6 py-4"
   >
-    <div class="flex items-center gap-2 font-semibold">
-      <Gamepad2 class="size-5" /><span dir="ltr">LobbyLocker</span>
+    <div class="flex items-center">
+      <img
+        src={dark ? lockupDark : lockupLight}
+        alt="LobbyLocker"
+        class="h-9 w-auto"
+      />
     </div>
     <Tabs.List aria-label={app.t("Main navigation")} class="h-auto flex-wrap"
       >{#each pages as item}<Tabs.Trigger
@@ -305,4 +311,4 @@
     ></AlertDialog.Content
   >
 </AlertDialog.Root>
-<AboutDialog {app} {version} bind:open={aboutOpen} />
+<AboutDialog {app} {version} {dark} bind:open={aboutOpen} />
