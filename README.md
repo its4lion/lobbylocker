@@ -90,9 +90,24 @@ all LobbyLocker rules.
 - LobbyLocker does not modify game files, inject code, launch games, or route
   traffic through another server.
 - Ping and connection scans are manual and never alter firewall rules.
-- Matchmaking can still choose an unexpected server, especially in a party.
-  Use a custom game—not the Overwatch practice range—when testing blocking.
-- There are no anti-cheat, matchmaking-region, or ranked-match guarantees.
+
+**What the rules match**
+
+- **Overwatch 2:** the Google Cloud ranges its servers sit in, over UDP. Login,
+  voice and downloads use TCP and are never blocked.
+- **Deadlock and CS2:** Valve's Steam Datagram Relay POPs, from Valve's published
+  configuration. The game server sits behind one.
+- **Never ICMP.** A blocked region still answers ping. That is not a failed
+  block.
+
+**What can still go wrong**
+
+- Steam relays can be re-routed, so an occasional unexpected server is normal.
+- A party leader can pull you into a region you blocked.
+- Addresses rotate. Refresh before assuming a block broke.
+- A match already queued still completes.
+- Test with a custom game; the Overwatch practice range runs on a fixed host.
+- No anti-cheat, matchmaking-region, or ranked-match guarantees.
 
 ## Uninstalling
 
@@ -115,6 +130,10 @@ firewall cleanup.
 LobbyLocker includes starter data for Overwatch 2, Deadlock, and CS2. Server
 lists can be incomplete or outdated, so every game can be edited locally.
 
+**Refresh official list** fetches Google's published cloud ranges for
+Overwatch 2 and Valve's Steam Datagram Relay configuration for Deadlock and
+CS2. Neither is an official list of game servers.
+
 Each game is stored as a JSON file:
 
 - Linux: `~/.config/lobbylocker/games/`
@@ -130,7 +149,8 @@ server list. LobbyLocker is not affiliated with Blizzard, Valve, or Google.
 | --------------------------------------- | -------------------------------------------------------------------------------- |
 | A game is missing                       | Use **Scan games**, add its library folder, or choose its executable.            |
 | Firewall status cannot be read          | Approve the permission prompt, then click **Retry**.                             |
-| A server still connects                 | Check the address list and test in a custom match.                               |
+| A blocked region still connects         | **Refresh official list**, then queue a new match — not the one in progress.     |
+| Ping still answers on a blocked region  | Expected. Ping is ICMP and is never blocked.                                     |
 | Another app loses connectivity on Linux | Shared addresses are blocked system-wide; change the selection or use **Reset**. |
 | Removing an AppImage                    | Use **Settings → Reset** first.                                                  |
 
