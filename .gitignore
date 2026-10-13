@@ -7,3 +7,4 @@ target/
 *.key.password
 .DS_Store
 apps/tauri/src-tauri/gen/
+apps/tauri/src-tauri/icons/

@@ -5,8 +5,9 @@
   "repository": "https://github.com/its4lion/LobbyLocker",
   "type": "module",
   "scripts": {
-    "dev": "tauri dev",
-    "build": "tauri build",
+    "icons": "tauri icon src/lib/assets/brand/lobbylocker-icon.svg",
+    "dev": "pnpm icons && tauri dev",
+    "build": "pnpm icons && tauri build",
     "web:dev": "vite --host 127.0.0.1",
     "web:build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",

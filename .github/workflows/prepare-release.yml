@@ -173,6 +173,7 @@ jobs:
       - name: Install Rust toolchain
         run: rustup default 1.90.0
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lobbylocker/tauri icons
       - name: Build release executable
         run: pnpm --filter @lobbylocker/tauri exec tauri build --no-bundle
       - name: Build pacman package
@@ -182,7 +183,7 @@ jobs:
           install -d "${package_root}/payload"
           install -Dm755 target/release/lobbylocker "${package_root}/payload/lobbylocker"
           cp -a data "${package_root}/payload/data"
-          install -Dm644 apps/tauri/src-tauri/icons/icon.png "${package_root}/payload/lobbylocker.png"
+          install -Dm644 apps/tauri/src/lib/assets/brand/lobbylocker-icon.svg "${package_root}/payload/lobbylocker.svg"
           install -Dm644 packaging/arch/lobbylocker.desktop "${package_root}/payload/lobbylocker.desktop"
           install -Dm644 packaging/arch/lobbylocker-reset-firewall.hook "${package_root}/payload/lobbylocker-reset-firewall.hook"
           install -Dm644 LICENSE "${package_root}/payload/LICENSE"
@@ -229,6 +230,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lobbylocker/tauri icons
       - run: pnpm --filter @lobbylocker/tauri exec tauri build --bundles appimage
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -258,6 +260,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lobbylocker/tauri icons
       - name: Build package-managed DEB
         run: >-
           pnpm --filter @lobbylocker/tauri exec tauri build --bundles deb
@@ -283,6 +286,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lobbylocker/tauri icons
       - run: pnpm --filter @lobbylocker/tauri exec tauri build --bundles nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

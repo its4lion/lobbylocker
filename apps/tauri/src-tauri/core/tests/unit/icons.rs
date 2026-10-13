@@ -32,7 +32,9 @@ fn malformed_and_oversized_images_or_executables_fall_back() {
 }
 #[test]
 fn ico_resources_are_converted_to_safe_png_and_output_is_bounded() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../icons/icon.ico");
+    // A small committed icon for the decoder to read. The app's own icon set is
+    // generated from artwork at build time, so a test cannot borrow it.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/icon.ico");
     assert!(image_file(&path)
         .unwrap()
         .starts_with("data:image/png;base64,"));

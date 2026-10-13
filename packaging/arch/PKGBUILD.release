@@ -14,8 +14,8 @@ package() {
   install -Dm755 "$startdir/payload/lobbylocker" "$pkgdir/usr/bin/lobbylocker"
   install -Dm644 "$startdir/payload/lobbylocker.desktop" \
     "$pkgdir/usr/share/applications/lobbylocker.desktop"
-  install -Dm644 "$startdir/payload/lobbylocker.png" \
-    "$pkgdir/usr/share/icons/hicolor/512x512/apps/lobbylocker.png"
+  install -Dm644 "$startdir/payload/lobbylocker.svg" \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/lobbylocker.svg"
   install -Dm644 "$startdir/payload/lobbylocker-reset-firewall.hook" \
     "$pkgdir/usr/share/libalpm/hooks/lobbylocker-reset-firewall.hook"
   install -Dm644 "$startdir/payload/LICENSE" \
