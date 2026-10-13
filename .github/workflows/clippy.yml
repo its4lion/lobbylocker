@@ -31,6 +31,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lobbylocker/tauri icons
       - run: pnpm --filter @lobbylocker/tauri web:build
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -53,6 +54,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lobbylocker/tauri icons
       - run: pnpm --filter @lobbylocker/tauri web:build
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
@@ -71,5 +73,6 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @lobbylocker/tauri icons
       - run: pnpm --filter @lobbylocker/tauri web:build
       - run: cargo clippy --workspace --all-targets -- -D warnings
