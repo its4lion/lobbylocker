@@ -32,7 +32,6 @@ Supports **Overwatch 2**, **Deadlock**, and **Counter-Strike 2**, plus custom ga
     <img
         src="docs/images/lobbylocker.png"
         alt="LobbyLocker"
-        width="88"
     />
 </div>
 
