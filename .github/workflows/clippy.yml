@@ -26,7 +26,7 @@ jobs:
       - name: Install system dependencies
         run: pacman -Syu --noconfirm git gtk3 webkit2gtk-4.1 librsvg pkgconf nodejs pnpm
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
@@ -49,7 +49,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
@@ -68,7 +68,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
