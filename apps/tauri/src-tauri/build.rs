@@ -1,12 +1,6 @@
 fn main() {
-    tauri_build::build();
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    if target_os == "windows" {
-        embed_resource::compile(
-            "assets/windows/lobbylocker-manifest.rc",
-            embed_resource::NONE,
-        )
-        .manifest_required()
-        .unwrap();
-    }
+    let mut windows = tauri_build::WindowsAttributes::new();
+    windows = windows.app_manifest(include_str!("assets/windows/lobbylocker.exe.manifest"));
+    let attrs = tauri_build::Attributes::new().windows_attributes(windows);
+    tauri_build::try_build(attrs).expect("failed to run build script");
 }

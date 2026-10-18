@@ -2236,7 +2236,6 @@ dependencies = [
 name = "lobbylocker-tauri"
 version = "0.0.2"
 dependencies = [
- "embed-resource",
  "lobbylocker-core",
  "rfd",
  "serde",
