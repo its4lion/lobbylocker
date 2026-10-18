@@ -131,30 +131,18 @@ fn windows_invalid_addresses_fail_the_entire_readback_instead_of_skipping_rules(
     assert!(windows_snapshot(&json).is_err());
 }
 #[test]
-fn windows_permission_errors_use_structured_categories_not_localized_messages() {
-    let denied = serde_json::to_vec(&json!({
-        "permissionDenied": true,
-        "message": "تم رفض الوصول."
-    }))
-    .unwrap();
-    assert_eq!(
-        windows_query_error(&denied, b""),
-        InspectionError::PermissionDenied("تم رفض الوصول.".into())
-    );
-    let other = br#"{"permissionDenied":false,"message":"Access is denied in a diagnostic, not its error category."}"#;
-    assert!(matches!(
-        windows_query_error(other, b""),
-        InspectionError::Other(_)
-    ));
-    for malformed in [
-        &b"not JSON"[..],
-        &br#"{"permissionDenied":true}"#[..],
-        &br#"{"permissionDenied":"true","message":"denied"}"#[..],
-        &br#"{"permissionDenied":true,"message":"denied","extra":true}"#[..],
-    ] {
+fn windows_permission_errors_use_hresult_not_localized_messages() {
+    for code in [0x80070005u32, 0x80041003] {
+        let message = "تم رفض الوصول.".to_owned();
         assert_eq!(
-            windows_query_error(malformed, b"PowerShell query failed"),
-            InspectionError::Other("PowerShell query failed".into())
+            windows_hresult_error(code as i32, message.clone()),
+            InspectionError::PermissionDenied(message),
+        );
+    }
+    for code in [0x80004005u32, 0x80040154, 0x80010106] {
+        assert_eq!(
+            windows_hresult_error(code as i32, "Access denied is only diagnostic text".into()),
+            InspectionError::Other("Access denied is only diagnostic text".into()),
         );
     }
 }
@@ -185,57 +173,6 @@ fn only_native_permission_failures_are_eligible_for_elevation() {
         InspectionError::from("Enter a valid IPv4, IPv6, or CIDR address."),
         InspectionError::Other(_)
     ));
-}
-#[cfg(target_os = "windows")]
-#[test]
-fn windows_inspection_script_parses_without_executing_firewall_commands() {
-    let script = windows_inspection_script().replace('\'', "''");
-    let check = format!("$ErrorActionPreference='Stop'; $tokens=$null; $errors=$null; $null=[System.Management.Automation.Language.Parser]::ParseInput('{script}',[ref]$tokens,[ref]$errors); if ($errors.Count) {{throw ($errors | Out-String)}}");
-    let output = crate::firewall::powershell_command()
-        .unwrap()
-        .args(["-NoProfile", "-NonInteractive", "-Command", &check])
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-#[cfg(target_os = "windows")]
-#[test]
-fn windows_inspection_script_preserves_permission_categories_without_querying_rules() {
-    // Throw before importing NetSecurity or executing any firewall cmdlet.
-    // This exercises Windows PowerShell's real catch/JSON/exit-code behavior
-    // without requiring admin access or modifying OS rules in the test suite.
-    for (failure, denied) in [
-        ("throw [System.UnauthorizedAccessException]::new('Acceso denegado.'); ", true),
-        ("throw [System.Exception]::new('Wrapper', [System.UnauthorizedAccessException]::new('Acceso denegado.')); ", true),
-        ("throw [System.Runtime.InteropServices.COMException]::new('Acceso denegado.', -2147024891); ", true),
-        ("throw [System.Runtime.InteropServices.COMException]::new('Acceso denegado.', -2147217405); ", true),
-        ("throw [System.Management.Automation.ErrorRecord]::new([System.Exception]::new('Acceso denegado.'), 'TestDenied', [System.Management.Automation.ErrorCategory]::PermissionDenied, $null); ", true),
-        ("throw [System.InvalidOperationException]::new('Access denied is text, not a permission category.'); ", false),
-    ] {
-        let script = windows_inspection_script().replace(WINDOWS_NETSECURITY, failure);
-        let error = query(crate::firewall::powershell_command().unwrap().args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &script,
-        ]))
-        .unwrap_err();
-        assert_eq!(
-            matches!(error, InspectionError::PermissionDenied(_)),
-            denied,
-            "{failure}: {error}"
-        );
-        assert!(
-            error.to_string().contains("Acceso denegado")
-                || error.to_string().contains("Wrapper")
-                || error.to_string().contains("Access denied"),
-            "{failure}: {error}"
-        );
-    }
 }
 fn game() -> Game {
     let mut game = crate::installed::custom_game(
@@ -598,27 +535,4 @@ fn windows_checks_effective_program_scope_and_legacy_global_rules_do_not_match()
         ),
         Verification::Empty
     );
-}
-#[test]
-fn inspection_script_is_read_only_and_uses_active_store() {
-    let script = windows_inspection_script();
-    assert!(script.contains(WINDOWS_GROUP));
-    assert!(script.contains("-PolicyStore ActiveStore"));
-    assert!(script.contains("Get-NetFirewallApplicationFilter"));
-    assert!(script.contains("Get-NetFirewallProfile"));
-    assert!(script.contains("Get-Service -Name MpsSvc,BFE"));
-    assert!(script.contains(WINDOWS_NETSECURITY));
-    assert!(script.contains("[System.Management.Automation.ErrorCategory]::PermissionDenied"));
-    assert!(script.contains("[System.UnauthorizedAccessException]"));
-    assert!(script.contains("permissionDenied=$denied"));
-    assert!(script.contains("exit 1"));
-    for write in [
-        "New-NetFirewallRule",
-        "Remove-NetFirewallRule",
-        "Set-NetFirewallRule",
-        "Set-NetFirewallProfile",
-        "Start-Process",
-    ] {
-        assert!(!script.contains(write));
-    }
 }

@@ -386,17 +386,8 @@ fn default_library_paths() -> Vec<PathBuf> {
         }
     }
     #[cfg(target_os = "windows")]
-    if let Ok(output) = std::process::Command::new("reg.exe")
-        .args(["query", r"HKCU\Software\Valve\Steam", "/v", "SteamPath"])
-        .output()
-    {
-        if output.status.success() {
-            for line in String::from_utf8_lossy(&output.stdout).lines() {
-                if let Some((_, path)) = line.split_once("REG_SZ") {
-                    roots.push(PathBuf::from(path.trim()));
-                }
-            }
-        }
+    if let Some(path) = registered_steam_path() {
+        roots.push(path);
     }
     if let Some(drive) = std::env::var_os("SystemDrive") {
         roots.push(PathBuf::from(format!(
@@ -408,6 +399,39 @@ fn default_library_paths() -> Vec<PathBuf> {
         roots.push(PathBuf::from(base).join("Epic/EpicGamesLauncher/Data/Manifests"));
     }
     roots
+}
+
+#[cfg(target_os = "windows")]
+fn registered_steam_path() -> Option<PathBuf> {
+    use std::{ffi::OsString, os::windows::ffi::OsStringExt};
+    use windows::{
+        core::w,
+        Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ},
+    };
+
+    // A bounded UTF-16 buffer preserves registered paths without launching reg.exe.
+    let mut value = vec![0u16; 32_768];
+    let mut length = (value.len() * std::mem::size_of::<u16>()) as u32;
+    let result = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!(r"Software\Valve\Steam"),
+            w!("SteamPath"),
+            RRF_RT_REG_SZ,
+            None,
+            Some(value.as_mut_ptr().cast()),
+            Some(&mut length),
+        )
+    };
+    if result.is_err() || length as usize > value.len() * 2 || !length.is_multiple_of(2) {
+        return None;
+    }
+    let value = &value[..length as usize / 2];
+    let end = value
+        .iter()
+        .position(|&unit| unit == 0)
+        .unwrap_or(value.len());
+    (end > 0).then(|| PathBuf::from(OsString::from_wide(&value[..end])))
 }
 
 pub fn scan_with_settings(extra_roots: &[PathBuf], excluded: &[PathBuf]) -> Scan {

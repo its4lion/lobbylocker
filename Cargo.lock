@@ -2217,6 +2217,7 @@ version = "0.0.2"
 dependencies = [
  "base64 0.22.1",
  "dirs 6.0.0",
+ "embed-resource",
  "fs2",
  "image",
  "ipnet",
@@ -2227,6 +2228,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "uuid",
+ "windows",
  "windows-sys 0.61.2",
 ]
 

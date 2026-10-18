@@ -17,8 +17,8 @@ Fast inner loops:
 
 ```sh
 cargo check -p lobbylocker-core --all-targets   # ~8s, no GTK/WebKit needed
-cargo test  -p lobbylocker-core                 # 83 tests
-pnpm --filter @lobbylocker/tauri test           # 53 tests
+cargo test  -p lobbylocker-core
+pnpm --filter @lobbylocker/tauri test
 pnpm --filter @lobbylocker/tauri exec vitest run <test-file>
 cargo test -p lobbylocker-core inspection      # single module
 pnpm --filter @lobbylocker/tauri exec tauri build --debug --no-bundle   # compile check without bundling
@@ -36,7 +36,7 @@ CLI (no Node/pnpm needed):
 
 ```sh
 cargo run -p lobbylocker-core --bin lobbylocker -- help
-cargo run -p lobbylocker-core --bin lobbylocker -- preview   # prints the nft/PowerShell script, never elevates
+cargo run -p lobbylocker-core --bin lobbylocker -- preview   # previews nft rules or native Windows rule data; never elevates
 ```
 
 ## Architecture
@@ -65,7 +65,9 @@ Firewall invariants worth preserving:
 - Owned objects only: Linux nftables table `inet lobbylocker_v1`, Windows group `LobbyLocker.Managed.v1`. Reset removes only those. Never flush the system ruleset or touch routes.
 - Elevation is a structured base64url `Request` payload (`--firewall-helper`), size-capped and validated. No shell strings, no frontend-supplied paths. `helper_entry()` must stay the first call in both `main()`s so the helper path never initializes the webview.
 - Windows UAC cannot redirect stdout, so readback goes over a bounded local named pipe validated against the launched helper's PID (the `readback` module).
+- Windows uses native Firewall COM, ICMP, TCP-table, and registry APIs. The elevated helper is launched with `ShellExecuteExW`; do not reintroduce PowerShell or console subprocesses for background work.
 - Blocked / Not blocked labels come from the OS readback, never from saved switches. Linux has no per-program scoping; the helper refuses executable-scoped requests rather than silently widening to system-wide.
+- Native COM firewall settings describe local policy. Readback checks Group Policy overrides and reports active rules as unverified on MDM-enrolled devices because effective MDM policy is not established by those APIs.
 - Windows-specific behavior in the inspection and firewall modules **still needs validation on Windows** — `cargo test -p lobbylocker-core` passes on Linux without proving Windows behavior.
 
 Persistence rules in the `store` module:
