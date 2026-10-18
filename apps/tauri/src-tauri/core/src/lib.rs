@@ -9,8 +9,6 @@ pub mod installed;
 pub mod latency;
 mod launcher_folders;
 pub mod model;
-#[cfg(target_os = "windows")]
-mod readback;
 pub mod store;
 #[cfg(target_os = "windows")]
 mod windows_firewall;

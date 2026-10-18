@@ -3,6 +3,7 @@ use crate::{
     model::{normalize_address, parse_ports, windows_program, FirewallRule, Protocol},
     Result,
 };
+#[cfg(target_os = "linux")]
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
@@ -214,6 +215,72 @@ pub fn windows_preview(request: &Request) -> Result<String> {
 }
 
 #[cfg(target_os = "linux")]
+/// Handle a tightly scoped, structured request before initializing the desktop runtime.
+/// The helper never loads user config or accepts arbitrary commands.
+pub fn helper_entry() -> Option<i32> {
+    let mut args = std::env::args().skip(1);
+    let arg = args.next()?;
+    if arg == "--reset-firewall" {
+        if args.next().is_some() {
+            eprintln!("Unexpected reset argument.");
+            return Some(1);
+        }
+        let result = execute_privileged(&Request::Reset {});
+        return Some(match result {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("{e}");
+                1
+            }
+        });
+    }
+    if arg != "--firewall-helper" {
+        return None;
+    }
+    let result: Result<i32> = (|| {
+        let encoded = args.next().ok_or("Missing firewall request.")?;
+        if encoded.len() > 1_000_000 {
+            return Err("Firewall request too large.".into());
+        }
+        let bytes = URL_SAFE_NO_PAD.decode(encoded).map_err(|e| e.to_string())?;
+        let request: Request = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        request.validate()?;
+        if args.next().is_some() {
+            return Err("Unexpected helper argument.".into());
+        }
+        let mut outcome = FirewallOutcome {
+            operation_error: if matches!(request, Request::Verify {}) {
+                None
+            } else {
+                execute_privileged(&request).err()
+            },
+            inspection: inspection::inspect(),
+        };
+        let mut bytes = serde_json::to_vec(&outcome).map_err(|e| e.to_string())?;
+        if bytes.len() > inspection::MAX_READBACK_BYTES {
+            outcome.inspection = Err("Firewall readback is too large.".into());
+            bytes = serde_json::to_vec(&outcome).map_err(|e| e.to_string())?;
+        }
+        use std::io::Write;
+        std::io::stdout()
+            .write_all(&bytes)
+            .map_err(|e| e.to_string())?;
+        Ok(if outcome.operation_error.is_some() {
+            1
+        } else {
+            0
+        })
+    })();
+    Some(match result {
+        Ok(code) => code,
+        Err(e) => {
+            eprintln!("{e}");
+            1
+        }
+    })
+}
+
+#[cfg(target_os = "linux")]
 fn owned_table_exists() -> Result<bool> {
     let tables = Command::new("/usr/bin/nft")
         .args(["-j", "list", "tables"])
@@ -276,182 +343,35 @@ fn run_nft(script: &str, check: bool) -> Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "windows")]
-struct WindowsFirewallLock(windows_sys::Win32::Foundation::HANDLE);
-
-#[cfg(target_os = "windows")]
-impl Drop for WindowsFirewallLock {
-    fn drop(&mut self) {
-        unsafe {
-            windows_sys::Win32::System::Threading::ReleaseMutex(self.0);
-            windows_sys::Win32::Foundation::CloseHandle(self.0);
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn acquire_windows_firewall_lock() -> Result<WindowsFirewallLock> {
-    use windows_sys::Win32::{
-        Foundation::{CloseHandle, WAIT_ABANDONED, WAIT_OBJECT_0, WAIT_TIMEOUT},
-        System::Threading::{CreateMutexW, WaitForSingleObject},
-    };
-
-    let name: Vec<u16> = "Local\\LobbyLocker.Firewall.v1\0".encode_utf16().collect();
-    let handle = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
-    if handle.is_null() {
-        return Err(format!(
-            "Could not create the firewall operation lock: {}",
-            std::io::Error::last_os_error()
-        ));
-    }
-    match unsafe { WaitForSingleObject(handle, 0) } {
-        WAIT_OBJECT_0 | WAIT_ABANDONED => Ok(WindowsFirewallLock(handle)),
-        WAIT_TIMEOUT => {
-            unsafe { CloseHandle(handle) };
-            Err("Another LobbyLocker firewall operation is running.".into())
-        }
-        _ => {
-            let error = std::io::Error::last_os_error();
-            unsafe { CloseHandle(handle) };
-            Err(format!(
-                "Could not acquire the firewall operation lock: {error}"
-            ))
-        }
-    }
-}
-
+#[cfg(target_os = "linux")]
 fn execute_privileged(request: &Request) -> Result<()> {
     request.validate()?;
     if matches!(request, Request::Verify {}) {
         return Err("Verification cannot modify firewall rules.".into());
     }
-    #[cfg(target_os = "linux")]
-    {
-        // This lock is global and root-owned, so separate app/CLI instances cannot race.
-        use std::os::unix::fs::OpenOptionsExt;
-        let lock_path = "/run/lobbylocker-firewall.lock";
-        let lock = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .mode(0o600)
-            .open(lock_path)
-            .map_err(|e| format!("Could not acquire firewall lock (root required): {e}"))?;
-        fs2::FileExt::try_lock_exclusive(&lock)
-            .map_err(|e| format!("Another firewall operation is running: {e}"))?;
-        let _lock = lock;
-        let script = nft_script(request, owned_table_exists()?)?;
-        run_nft(&script, true)?;
-        // A single nft batch replaces the table atomically.
-        run_nft(&script, false)?;
-        // Keep the operation lock until removal is confirmed. Package managers
-        // must not lose the cleanup executable on a false-successful Reset.
-        if matches!(request, Request::Reset {}) && owned_table_exists()? {
-            return Err("LobbyLocker firewall rules remain after Reset.".into());
-        }
-        Ok(())
+    // This lock is global and root-owned, so separate app/CLI instances cannot race.
+    use std::os::unix::fs::OpenOptionsExt;
+    let lock_path = "/run/lobbylocker-firewall.lock";
+    let lock = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(lock_path)
+        .map_err(|e| format!("Could not acquire firewall lock (root required): {e}"))?;
+    fs2::FileExt::try_lock_exclusive(&lock)
+        .map_err(|e| format!("Another firewall operation is running: {e}"))?;
+    let _lock = lock;
+    let script = nft_script(request, owned_table_exists()?)?;
+    run_nft(&script, true)?;
+    // A single nft batch replaces the table atomically.
+    run_nft(&script, false)?;
+    // Keep the operation lock until removal is confirmed. Package managers
+    // must not lose the cleanup executable on a false-successful Reset.
+    if matches!(request, Request::Reset {}) && owned_table_exists()? {
+        return Err("LobbyLocker firewall rules remain after Reset.".into());
     }
-    #[cfg(target_os = "windows")]
-    {
-        // A named mutex serializes elevated helpers launched by separate app/CLI
-        // processes. The Tauri command guard only covers one desktop process.
-        let _lock = acquire_windows_firewall_lock()?;
-        crate::windows_firewall::execute(request)
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-    Err("Firewall changes are supported on Windows and Linux only.".into())
-}
-
-/// Handle a tightly scoped, structured request before initializing the desktop runtime.
-/// The helper never loads user config, invokes a shell on Linux, or accepts arbitrary commands.
-pub fn helper_entry() -> Option<i32> {
-    let mut args = std::env::args().skip(1);
-    let arg = args.next()?;
-    if arg == "--reset-firewall" {
-        if args.next().is_some() {
-            eprintln!("Unexpected reset argument.");
-            return Some(1);
-        }
-        #[cfg(target_os = "windows")]
-        let result = elevate(&Request::Reset {});
-        #[cfg(not(target_os = "windows"))]
-        let result = execute_privileged(&Request::Reset {});
-        return Some(match result {
-            Ok(()) => 0,
-            Err(e) => {
-                eprintln!("{e}");
-                1
-            }
-        });
-    }
-    if arg != "--firewall-helper" {
-        return None;
-    }
-    let result: Result<i32> = (|| {
-        let encoded = args.next().ok_or("Missing firewall request.")?;
-        if encoded.len() > 1_000_000 {
-            return Err("Firewall request too large.".into());
-        }
-        let bytes = URL_SAFE_NO_PAD.decode(encoded).map_err(|e| e.to_string())?;
-        let request: Request = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-        request.validate()?;
-        #[cfg(target_os = "windows")]
-        let pipe = match args.next() {
-            Some(flag) if flag == "--readback-pipe" => {
-                let name = args.next().ok_or("Missing readback pipe.")?;
-                crate::readback::validate_name(&name)?;
-                Some(name)
-            }
-            Some(_) => return Err("Unexpected helper argument.".into()),
-            None => None,
-        };
-        if args.next().is_some() {
-            return Err("Unexpected helper argument.".into());
-        }
-        // Read back even after a failed update: the OS, not the requested rule
-        // list or process exit code, determines the UI's active blocks.
-        let mut outcome = FirewallOutcome {
-            operation_error: if matches!(request, Request::Verify {}) {
-                None
-            } else {
-                execute_privileged(&request).err()
-            },
-            inspection: inspection::inspect(),
-        };
-        let mut bytes = serde_json::to_vec(&outcome).map_err(|e| e.to_string())?;
-        if bytes.len() > inspection::MAX_READBACK_BYTES {
-            outcome.inspection = Err("Firewall readback is too large.".into());
-            bytes = serde_json::to_vec(&outcome).map_err(|e| e.to_string())?;
-        }
-        #[cfg(target_os = "windows")]
-        if let Some(pipe) = pipe {
-            crate::readback::send(&pipe, &bytes)?;
-        } else {
-            use std::io::Write;
-            std::io::stdout()
-                .write_all(&bytes)
-                .map_err(|e| e.to_string())?;
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            use std::io::Write;
-            std::io::stdout()
-                .write_all(&bytes)
-                .map_err(|e| e.to_string())?;
-        }
-        Ok(if outcome.operation_error.is_some() {
-            1
-        } else {
-            0
-        })
-    })();
-    Some(match result {
-        Ok(code) => code,
-        Err(e) => {
-            eprintln!("{e}");
-            1
-        }
-    })
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
@@ -539,6 +459,7 @@ pub struct FirewallOutcome {
 }
 
 impl FirewallOutcome {
+    #[allow(dead_code)]
     fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() > inspection::MAX_READBACK_BYTES {
             return Err("Firewall readback is too large.".into());
@@ -553,13 +474,14 @@ impl FirewallOutcome {
 }
 
 fn elevated_readback(request: &Request) -> Result<FirewallOutcome> {
-    let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(request).map_err(|e| e.to_string())?);
-    if payload.len() > 1_000_000 {
-        return Err("Firewall request too large.".into());
-    }
-    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
     #[cfg(target_os = "linux")]
     {
+        let payload =
+            URL_SAFE_NO_PAD.encode(serde_json::to_vec(request).map_err(|e| e.to_string())?);
+        if payload.len() > 1_000_000 {
+            return Err("Firewall request too large.".into());
+        }
+        let executable = std::env::current_exe().map_err(|e| e.to_string())?;
         // AppImage elevation must use the outer image, not a transient mounted executable.
         let appimage = std::env::var_os("APPIMAGE").map(std::path::PathBuf::from);
         let running = std::fs::metadata("/proc/self/exe")
@@ -580,103 +502,19 @@ fn elevated_readback(request: &Request) -> Result<FirewallOutcome> {
     }
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::{
-            ffi::OsStrExt,
-            io::{AsRawHandle, FromRawHandle, OwnedHandle},
+        // The app runs as administrator (requireAdministrator manifest), so
+        // firewall mutation and readback happen in-process. No helper, UAC, or
+        // named pipe is needed. Verify never mutates, so it must not call
+        // execute (which would otherwise report a spurious failure).
+        let operation_error = if matches!(request, Request::Verify {}) {
+            None
+        } else {
+            crate::windows_firewall::execute(request).err()
         };
-        use windows::Win32::{
-            Foundation::RPC_E_CHANGED_MODE,
-            System::Com::{
-                CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
-            },
-        };
-        use windows_sys::Win32::{
-            Foundation::WAIT_OBJECT_0,
-            System::Threading::{GetProcessId, WaitForSingleObject, INFINITE},
-            UI::{
-                Shell::{
-                    ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC,
-                    SEE_MASK_NOCLOSEPROCESS, SEE_MASK_NO_CONSOLE, SHELLEXECUTEINFOW,
-                },
-                WindowsAndMessaging::SW_HIDE,
-            },
-        };
-        struct Apartment(bool);
-        impl Drop for Apartment {
-            fn drop(&mut self) {
-                if self.0 {
-                    unsafe { CoUninitialize() };
-                }
-            }
-        }
-        let initialized =
-            unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
-        if initialized.is_err() && initialized != RPC_E_CHANGED_MODE {
-            return Err(format!(
-                "Could not initialize administrator request: {initialized}"
-            ));
-        }
-        let _apartment = Apartment(initialized.is_ok());
-        // RunAs cannot redirect stdout. Keep the bounded, local named pipe and
-        // authenticate its client against the process handle returned by Windows.
-        let receiver = crate::readback::Receiver::new()?;
-        let file: Vec<u16> = executable
-            .as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect();
-        let verb: Vec<u16> = "runas".encode_utf16().chain(Some(0)).collect();
-        // Only our validated base64url payload and generated pipe token enter
-        // the argument list; the executable path is passed separately.
-        let arguments: Vec<u16> = format!(
-            "--firewall-helper {payload} --readback-pipe {}",
-            receiver.name(),
-        )
-        .encode_utf16()
-        .chain(Some(0))
-        .collect();
-        let mut launch = SHELLEXECUTEINFOW {
-            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
-            fMask: SEE_MASK_NOCLOSEPROCESS
-                | SEE_MASK_NOASYNC
-                | SEE_MASK_NO_CONSOLE
-                | SEE_MASK_FLAG_NO_UI,
-            lpVerb: verb.as_ptr(),
-            lpFile: file.as_ptr(),
-            lpParameters: arguments.as_ptr(),
-            nShow: SW_HIDE,
-            ..Default::default()
-        };
-        if unsafe { ShellExecuteExW(&mut launch) } == 0 {
-            return Err(format!(
-                "Firewall operation failed or UAC was cancelled: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        if launch.hProcess.is_null() {
-            return Err("Windows did not return a firewall helper process handle.".into());
-        }
-        let process = unsafe { OwnedHandle::from_raw_handle(launch.hProcess) };
-        let pid = unsafe { GetProcessId(process.as_raw_handle()) };
-        if pid == 0 {
-            return Err(format!(
-                "Could not identify firewall helper: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        // UAC may take as long as the user needs. The helper's readback is
-        // consumed concurrently, so FlushFileBuffers cannot deadlock this wait.
-        if unsafe { WaitForSingleObject(process.as_raw_handle(), INFINITE) } != WAIT_OBJECT_0 {
-            return Err(format!(
-                "Could not wait for firewall helper: {}",
-                std::io::Error::last_os_error()
-            ));
-        }
-        let (client, bytes) = receiver.finish()?;
-        if client != pid {
-            return Err("Firewall readback came from an unexpected process.".into());
-        }
-        FirewallOutcome::from_bytes(&bytes)
+        Ok(FirewallOutcome {
+            operation_error,
+            inspection: crate::windows_firewall::inspect().map_err(|e| e.to_string()),
+        })
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     Err("Firewall changes are supported on Windows and Linux only.".into())

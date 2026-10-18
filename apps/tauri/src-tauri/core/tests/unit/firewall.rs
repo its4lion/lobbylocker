@@ -72,7 +72,7 @@ fn verify_requests_cannot_enter_a_mutating_script_or_execution_path() {
     assert!(nft_script(&request, true).is_err());
     assert!(windows_rule_plan(&request).is_err());
     assert!(windows_preview(&request).is_err());
-    assert!(execute_privileged(&request).is_err());
+    assert!(change_with_readback(&request).is_err());
     assert!(elevate(&request).is_err());
     assert!(serde_json::from_str::<Request>(r#"{"action":"verify","rules":[]}"#).is_err());
     assert!(serde_json::from_str::<Request>(

@@ -33,7 +33,7 @@ fn data_path(app: &tauri::App, variable: &str, folder: &str) -> lobbylocker_core
 }
 
 fn main() {
-    // The elevated helper must run before any window, IPC, or user-config initialization.
+    #[cfg(target_os = "linux")]
     if let Some(code) = lobbylocker_core::firewall::helper_entry() {
         std::process::exit(code);
     }

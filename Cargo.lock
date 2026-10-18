@@ -2217,6 +2217,7 @@ version = "0.0.2"
 dependencies = [
  "base64 0.22.1",
  "dirs 6.0.0",
+ "embed-resource",
  "fs2",
  "image",
  "ipnet",
@@ -2235,6 +2236,7 @@ dependencies = [
 name = "lobbylocker-tauri"
 version = "0.0.2"
 dependencies = [
+ "embed-resource",
  "lobbylocker-core",
  "rfd",
  "serde",

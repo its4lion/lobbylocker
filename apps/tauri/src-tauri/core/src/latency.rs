@@ -156,7 +156,7 @@ mod windows_ping {
                 })
             }
         };
-        let Some((status, round_trip)) = responded.filter(|(status, _)| *status == 0) else {
+        let Some((_status, round_trip)) = responded.filter(|(status, _)| *status == 0) else {
             return Err("No ICMP reply (filtered, blocked, or unreachable).".into());
         };
         Ok(f64::from(round_trip))

@@ -8,6 +8,7 @@ repository.workspace = true
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+embed-resource = "3.0.11"
 
 [dependencies]
 tauri = { version = "2", features = [] }
