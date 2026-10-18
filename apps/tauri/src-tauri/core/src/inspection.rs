@@ -1,7 +1,7 @@
 //! Read-only, conservative verification. Never infer active rules from disk
 //! preferences, rule names alone, or an unsuccessful OS query.
 use crate::{
-    firewall::{OWNER, TABLE, WINDOWS_GROUP, WINDOWS_NETSECURITY},
+    firewall::{OWNER, TABLE},
     model::{
         normalize_address, parse_ports, windows_program, Endpoint, FirewallRule, FirewallScope,
         FirewallTarget, Game, Protocol,
@@ -742,48 +742,14 @@ pub fn windows_snapshot(json: &Value) -> Result<Inspection> {
     Ok(snapshot)
 }
 
-/// ActiveStore reflects effective rules, not just disk configuration. This script
-/// contains no write cmdlets and never runs a selected game executable.
-pub fn windows_inspection_script() -> String {
-    format!(
-        r#"$ErrorActionPreference='Stop'; [Console]::OutputEncoding=(New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false); try {{ {WINDOWS_NETSECURITY}$supported=$true; $rows=@(); $profiles=@(Get-NetFirewallProfile -PolicyStore ActiveStore); $services=@(Get-Service -Name MpsSvc,BFE); $enforced=$profiles.Count -eq 3 -and $services.Count -eq 2 -and @($services | Where-Object {{[string]$_.Status -ne 'Running'}}).Count -eq 0 -and @($profiles | Where-Object {{[string]$_.Enabled -ne 'True' -or [string]$_.AllowLocalFirewallRules -eq 'False'}}).Count -eq 0;
-$owned=@(Get-NetFirewallRule -PolicyStore ActiveStore | Where-Object {{$_.Group -eq '{WINDOWS_GROUP}'}});
-foreach ($r in $owned) {{
- if ([string]$r.Enabled -ne 'True' -or [string]$r.Direction -ne 'Outbound' -or [string]$r.Action -ne 'Block') {{continue}}
- $a=$r|Get-NetFirewallAddressFilter; $p=$r|Get-NetFirewallPortFilter; $app=$r|Get-NetFirewallApplicationFilter; $svc=$r|Get-NetFirewallServiceFilter; $iface=$r|Get-NetFirewallInterfaceFilter; $type=$r|Get-NetFirewallInterfaceTypeFilter; $security=$r|Get-NetFirewallSecurityFilter;
-  if ([string]$r.Profile -ne 'Any' -or @($a.RemoteAddress).Count -ne 1 -or [string]$a.LocalAddress -ne 'Any' -or [string]$p.LocalPort -ne 'Any' -or @($p.RemotePort).Count -ne 1 -or [string]$svc.Service -ne 'Any' -or [string]$iface.InterfaceAlias -ne 'Any' -or [string]$type.InterfaceType -ne 'Any' -or ($app.Package -and [string]$app.Package -ne 'Any') -or [string]$security.Authentication -ne 'NotRequired' -or [string]$security.Encryption -ne 'NotRequired' -or [string]$security.LocalUser -ne 'Any' -or [string]$security.RemoteUser -ne 'Any' -or [string]$security.RemoteMachine -ne 'Any') {{$supported=$false}}
- $source=$null; if ([string]$r.Name -match '^LobbyLocker\.[a-fA-F0-9]{{32}}\.([a-zA-Z0-9_-]{{1,96}})\.(TCP|UDP|Any)$') {{$source=$Matches[1]}}
- $rows += [pscustomobject]@{{address=[string]$a.RemoteAddress[0];protocol=[string]$p.Protocol;ports=[string]$p.RemotePort[0];program=[string]$app.Program;sourceId=$source}}
-}}
-[pscustomobject]@{{enforced=$enforced;supported=$supported;rules=@($rows)}}|ConvertTo-Json -Depth 5 -Compress
-}} catch {{
- $denied=$_.CategoryInfo.Category -eq [System.Management.Automation.ErrorCategory]::PermissionDenied; $exception=$_.Exception;
- while ($null -ne $exception) {{
-  if ($exception -is [System.UnauthorizedAccessException] -or $exception.HResult -eq -2147024891 -or $exception.HResult -eq -2147217405) {{$denied=$true}}
-  $exception=$exception.InnerException;
- }}
- [pscustomobject]@{{permissionDenied=$denied;message=[string]$_.Exception.Message}}|ConvertTo-Json -Compress; exit 1
-}}"#
-    )
-}
-
 #[cfg(any(target_os = "windows", test))]
-fn windows_query_error(stdout: &[u8], stderr: &[u8]) -> InspectionError {
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct QueryError {
-        permission_denied: bool,
-        message: String,
-    }
-    // PowerShell reports an error category/HRESULT, not localized error text.
-    if let Ok(error) = serde_json::from_slice::<QueryError>(stdout) {
-        if error.permission_denied {
-            InspectionError::PermissionDenied(error.message)
-        } else {
-            InspectionError::Other(error.message)
-        }
+pub(crate) fn windows_hresult_error(code: i32, message: String) -> InspectionError {
+    // Native HRESULTs remain reliable on systems with any display language.
+    // A diagnostic merely containing "access denied" must not trigger UAC.
+    if matches!(code as u32, 0x80070005 | 0x80041003) {
+        InspectionError::PermissionDenied(message)
     } else {
-        InspectionError::Other(String::from_utf8_lossy(stderr).trim().to_owned())
+        InspectionError::Other(message)
     }
 }
 
@@ -799,6 +765,7 @@ fn nft_query_error(stderr: &[u8]) -> InspectionError {
     }
 }
 
+#[cfg(target_os = "linux")]
 fn query(command: &mut std::process::Command) -> InspectionResult<Value> {
     use std::{
         io::Read,
@@ -868,12 +835,7 @@ fn query(command: &mut std::process::Command) -> InspectionResult<Value> {
         return Err("Firewall inspection response is too large.".into());
     }
     if !status?.success() {
-        #[cfg(target_os = "windows")]
-        return Err(windows_query_error(&stdout, &stderr));
-        #[cfg(target_os = "linux")]
         return Err(nft_query_error(&stderr));
-        #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-        return Err(String::from_utf8_lossy(&stderr).trim().to_owned().into());
     }
     serde_json::from_slice(&stdout)
         .map_err(|e| format!("Invalid firewall inspection response: {e}").into())
@@ -903,13 +865,7 @@ pub(crate) fn inspect_with_error() -> InspectionResult<Inspection> {
     }
     #[cfg(target_os = "windows")]
     {
-        let json = query(crate::firewall::powershell_command()?.args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            &windows_inspection_script(),
-        ]))?;
-        windows_snapshot(&json).map_err(Into::into)
+        crate::windows_firewall::inspect()
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {

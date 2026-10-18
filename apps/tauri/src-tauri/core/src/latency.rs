@@ -1,9 +1,10 @@
 use crate::{model::Game, Result};
 use serde::Serialize;
+#[cfg(target_os = "linux")]
+use std::process::Command;
 use std::{
     collections::VecDeque,
     net::IpAddr,
-    process::Command,
     sync::{Arc, Mutex},
     thread,
     time::{SystemTime, UNIX_EPOCH},
@@ -33,9 +34,11 @@ pub fn parse_ping(output: &str) -> Option<f64> {
 }
 
 pub fn ping(target: &str) -> Result<f64> {
-    let _: IpAddr = target
+    let address: IpAddr = target
         .parse()
         .map_err(|_| "Ping target must be a literal IP address.")?;
+    #[cfg(not(target_os = "windows"))]
+    let _ = address;
     #[cfg(target_os = "linux")]
     let output = Command::new("ping")
         .env("LC_ALL", "C")
@@ -43,16 +46,113 @@ pub fn ping(target: &str) -> Result<f64> {
         .output()
         .map_err(|e| format!("Could not run ping: {e}"))?;
     #[cfg(target_os = "windows")]
-    let output = Command::new("powershell.exe").args(["-NoProfile", "-NonInteractive", "-Command", &format!("$p=New-Object System.Net.NetworkInformation.Ping; try {{ $r=$p.Send('{target}',2000); if ($r.Status -eq 'Success') {{ Write-Output ('time=' + $r.RoundtripTime + ' ms') }} else {{ exit 1 }} }} finally {{ $p.Dispose() }}")]).output().map_err(|e| format!("Could not run ping: {e}"))?;
+    return windows_ping::ping(address);
     #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     return Err("Ping is currently supported on Windows and Linux.".into());
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     {
         if !output.status.success() {
             return Err("No ICMP reply (filtered, blocked, or unreachable).".into());
         }
         parse_ping(&String::from_utf8_lossy(&output.stdout))
             .ok_or("Could not read ping response.".into())
+    }
+}
+
+#[cfg(target_os = "windows")]
+mod windows_ping {
+    use super::*;
+    use windows::Win32::{
+        Foundation::HANDLE,
+        NetworkManagement::IpHelper::{
+            Icmp6CreateFile, Icmp6SendEcho2, IcmpCloseHandle, IcmpCreateFile, IcmpSendEcho,
+            ICMPV6_ECHO_REPLY_LH, ICMP_ECHO_REPLY,
+        },
+        Networking::WinSock::{AF_INET6, IN6_ADDR, IN6_ADDR_0, SOCKADDR_IN6},
+    };
+
+    struct IcmpHandle(HANDLE);
+
+    impl Drop for IcmpHandle {
+        fn drop(&mut self) {
+            // ICMP handles require their own close API.
+            let _ = unsafe { IcmpCloseHandle(self.0) };
+        }
+    }
+
+    pub(super) fn ping(address: IpAddr) -> Result<f64> {
+        let request = [0u8; 32];
+        // Aligned storage for either reply header, payload, ICMP error and IO_STATUS_BLOCK.
+        let mut reply = [0u64; 32];
+        let reply_size = std::mem::size_of_val(&reply) as u32;
+        let (count, status, elapsed) = match address {
+            IpAddr::V4(address) => {
+                let handle = IcmpHandle(
+                    unsafe { IcmpCreateFile() }
+                        .map_err(|e| format!("Could not initialize ICMP: {e}"))?,
+                );
+                let count = unsafe {
+                    IcmpSendEcho(
+                        handle.0,
+                        u32::from_ne_bytes(address.octets()),
+                        request.as_ptr().cast(),
+                        request.len() as u16,
+                        None,
+                        reply.as_mut_ptr().cast(),
+                        reply_size,
+                        2000,
+                    )
+                };
+                let response = unsafe { reply.as_ptr().cast::<ICMP_ECHO_REPLY>().read_unaligned() };
+                (count, response.Status, response.RoundTripTime)
+            }
+            IpAddr::V6(address) => {
+                let handle = IcmpHandle(
+                    unsafe { Icmp6CreateFile() }
+                        .map_err(|e| format!("Could not initialize IPv6 ICMP: {e}"))?,
+                );
+                let source = SOCKADDR_IN6 {
+                    sin6_family: AF_INET6,
+                    ..Default::default()
+                };
+                let destination = SOCKADDR_IN6 {
+                    sin6_family: AF_INET6,
+                    sin6_addr: IN6_ADDR {
+                        u: IN6_ADDR_0 {
+                            Byte: address.octets(),
+                        },
+                    },
+                    ..Default::default()
+                };
+                let count = unsafe {
+                    Icmp6SendEcho2(
+                        handle.0,
+                        None,
+                        None,
+                        None,
+                        &source,
+                        &destination,
+                        request.as_ptr().cast(),
+                        request.len() as u16,
+                        None,
+                        reply.as_mut_ptr().cast(),
+                        reply_size,
+                        2000,
+                    )
+                };
+                let response = unsafe {
+                    reply
+                        .as_ptr()
+                        .cast::<ICMPV6_ECHO_REPLY_LH>()
+                        .read_unaligned()
+                };
+                (count, response.Status, response.RoundTripTime)
+            }
+        };
+        if count == 0 || status != 0 {
+            return Err("No ICMP reply (filtered, blocked, or unreachable).".into());
+        }
+        Ok(f64::from(elapsed))
     }
 }
 

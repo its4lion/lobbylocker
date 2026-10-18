@@ -30,7 +30,7 @@ fn run() -> lobbylocker_core::Result<()> {
         "preview" => {
             let rules = resolve_rules(&snapshot.games, &snapshot.preferences)?;
             let request = Request::Apply { rules };
-            let script = if cfg!(target_os = "windows") { firewall::powershell_script(&request)? } else { firewall::nft_script(&request, false)? };
+            let script = if cfg!(target_os = "windows") { firewall::windows_preview(&request)? } else { firewall::nft_script(&request, false)? };
             println!("{script}");
         }
         "apply" => firewall::elevate(&Request::Apply { rules: resolve_rules(&snapshot.games, &snapshot.preferences)? })?,

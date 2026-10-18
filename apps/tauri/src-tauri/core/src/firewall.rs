@@ -5,6 +5,7 @@ use crate::{
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "linux")]
 use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::{io::Write, process::Stdio};
@@ -12,30 +13,6 @@ use std::{io::Write, process::Stdio};
 pub const TABLE: &str = "lobbylocker_v1";
 pub const OWNER: &str = "LobbyLocker managed firewall rules v1";
 pub const WINDOWS_GROUP: &str = "LobbyLocker.Managed.v1";
-pub(crate) const WINDOWS_NETSECURITY: &str = "Import-Module (Join-Path $PSHOME 'Modules\\NetSecurity\\NetSecurity.psd1') -ErrorAction Stop; ";
-
-#[cfg(target_os = "windows")]
-pub(crate) fn powershell_command() -> Result<Command> {
-    use std::os::windows::ffi::OsStringExt;
-    // Do not obtain firewall evidence from an executable or module found in a
-    // user-writable PATH/current directory. Use the native system installation.
-    let mut buffer = [0u16; 32768];
-    let length = unsafe {
-        windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW(
-            buffer.as_mut_ptr(),
-            buffer.len() as u32,
-        )
-    } as usize;
-    if length == 0 || length >= buffer.len() {
-        return Err("Could not locate system PowerShell.".into());
-    }
-    let path = std::path::PathBuf::from(std::ffi::OsString::from_wide(&buffer[..length]))
-        .join("WindowsPowerShell")
-        .join("v1.0")
-        .join("powershell.exe");
-    Ok(Command::new(path))
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Request {
@@ -110,56 +87,130 @@ pub fn nft_script(request: &Request, exists: bool) -> Result<String> {
     Ok(script)
 }
 
-pub fn powershell_script(request: &Request) -> Result<String> {
+/// A validated native Windows Firewall operation. No shell commands are generated.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WindowsRuleSpec {
+    pub name: String,
+    pub source_id: String,
+    pub program: String,
+    pub address: String,
+    pub protocol: i32,
+    pub ports: Option<String>,
+}
+
+pub(crate) fn windows_rule_plan(request: &Request) -> Result<Vec<WindowsRuleSpec>> {
     request.validate()?;
-    if matches!(request, Request::Verify {}) {
-        return Err("Verification cannot generate firewall changes.".into());
-    }
-    let preamble = format!("$ErrorActionPreference='Stop'; {WINDOWS_NETSECURITY}$old=@(Get-NetFirewallRule -PolicyStore PersistentStore | Where-Object {{$_.Group -eq '{WINDOWS_GROUP}'}}); ");
-    let Request::Apply { rules } = request else {
-        let mut script = format!("{preamble}$old | Remove-NetFirewallRule -ErrorAction Stop; ");
-        // Confirm both saved and effective rules are gone, including disabled
-        // rules that are intentionally omitted from the UI's active-block list.
-        for store in ["PersistentStore", "ActiveStore"] {
-            script.push_str(&format!("if (@(Get-NetFirewallRule -PolicyStore {store} | Where-Object {{$_.Group -eq '{WINDOWS_GROUP}'}}).Count -ne 0) {{ throw 'LobbyLocker firewall rules remain after Reset.' }}; "));
-        }
-        return Ok(script);
+    let rules = match request {
+        Request::Apply { rules } => rules,
+        Request::Reset {} => return Ok(Vec::new()),
+        Request::Verify {} => return Err("Verification cannot generate firewall changes.".into()),
     };
-    let transaction = uuid::Uuid::new_v4().simple().to_string();
-    // Validate every program before creating new rules or removing the old ones.
-    let mut preflight = String::new();
-    let mut programs = std::collections::HashSet::new();
+    let generation = uuid::Uuid::new_v4().simple().to_string();
+    let mut plan = Vec::new();
+    let mut identifiers = std::collections::HashSet::new();
     for rule in rules {
-        let program = windows_program(rule.program.as_deref().ok_or("Windows firewall rules require a game executable. System-wide fallback is not allowed.")?)?;
-        if programs.insert(program.clone()) {
-            let literal = program.replace('\'', "''");
-            preflight.push_str(&format!("if (-not (Test-Path -LiteralPath '{literal}' -PathType Leaf)) {{ throw 'Game executable is unavailable. Choose its current .exe before Apply.' }}; "));
+        if !identifiers.insert(rule.endpoint.id.to_ascii_lowercase()) {
+            return Err("Windows firewall rule IDs must be unique ignoring case.".into());
         }
-    }
-    let mut script = format!("{preflight}{preamble}$new=@(); try {{ ");
-    for rule in rules {
-        let program = windows_program(rule.program.as_deref().ok_or("Missing game executable.")?)?
-            .replace('\'', "''");
-        let rule = &rule.endpoint;
-        let address = normalize_address(&rule.address)?;
-        let ports = parse_ports(&rule.ports)?;
-        let protocols = match (&rule.protocol, ports) {
-            (Protocol::Any, None) => vec!["Any"],
-            (Protocol::Any, Some(_)) => vec!["TCP", "UDP"],
-            (Protocol::Tcp, _) => vec!["TCP"],
-            (Protocol::Udp, _) => vec!["UDP"],
+        let program = windows_program(rule.program.as_deref().ok_or(
+            "Windows firewall rules require a game executable. System-wide fallback is not allowed.",
+        )?)?;
+        let endpoint = &rule.endpoint;
+        let address = normalize_address(&endpoint.address)?;
+        let ports = parse_ports(&endpoint.ports)?.map(|(start, end)| format!("{start}-{end}"));
+        let protocols: &[(i32, &str)] = match (&endpoint.protocol, &ports) {
+            (Protocol::Any, None) => &[(256, "Any")],
+            (Protocol::Any, Some(_)) => &[(6, "TCP"), (17, "UDP")],
+            (Protocol::Tcp, _) => &[(6, "TCP")],
+            (Protocol::Udp, _) => &[(17, "UDP")],
         };
-        for protocol in protocols {
-            script.push_str(&format!("$new += New-NetFirewallRule -Name 'LobbyLocker.{transaction}.{}.{protocol}' -DisplayName 'LobbyLocker: {}' -Group '{WINDOWS_GROUP}' -Direction Outbound -Action Block -Enabled True -Profile Any -Program '{program}' -RemoteAddress '{address}' -Protocol {protocol}", rule.id, rule.id));
-            if let Some((start, end)) = ports {
-                script.push_str(&format!(" -RemotePort '{start}-{end}'"));
-            }
-            script.push_str(" -ErrorAction Stop; ");
+        for (protocol, suffix) in protocols {
+            plan.push(WindowsRuleSpec {
+                name: format!("LobbyLocker.{generation}.{}.{suffix}", endpoint.id),
+                source_id: endpoint.id.clone(),
+                program: program.clone(),
+                address: address.clone(),
+                protocol: *protocol,
+                ports: ports.clone(),
+            });
         }
     }
-    // Keep the previous generation until the complete new generation has been created.
-    script.push_str("$old | Remove-NetFirewallRule -ErrorAction Stop; } catch { $new | Remove-NetFirewallRule -ErrorAction SilentlyContinue; throw; }");
-    Ok(script)
+    Ok(plan)
+}
+
+/// Narrow interface shared by the native policy store and fault-injected tests.
+#[cfg(any(target_os = "windows", test))]
+pub(crate) trait WindowsRuleStore {
+    fn managed_names(&mut self) -> Result<Vec<String>>;
+    fn add(&mut self, rule: &WindowsRuleSpec) -> Result<()>;
+    fn remove(&mut self, name: &str) -> Result<()>;
+}
+
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn replace_windows_rules(
+    store: &mut impl WindowsRuleStore,
+    plan: &[WindowsRuleSpec],
+) -> Result<()> {
+    let old = store.managed_names()?;
+    let mut expected: Vec<_> = plan.iter().map(|rule| rule.name.to_lowercase()).collect();
+    expected.sort();
+    if expected.windows(2).any(|names| names[0] == names[1])
+        || old
+            .iter()
+            .any(|name| expected.binary_search(&name.to_lowercase()).is_ok())
+    {
+        return Err("Duplicate or colliding Windows firewall rule names.".into());
+    }
+    let mut created: Vec<&str> = Vec::new();
+    for rule in plan {
+        if let Err(error) = store.add(rule) {
+            let mut cleanup_errors = Vec::new();
+            for name in created.iter().rev() {
+                if let Err(cleanup) = store.remove(name) {
+                    cleanup_errors.push(cleanup);
+                }
+            }
+            return Err(if cleanup_errors.is_empty() {
+                error
+            } else {
+                format!(
+                    "{error} Replacement-rule cleanup also failed: {}",
+                    cleanup_errors.join("; ")
+                )
+            });
+        }
+        created.push(rule.name.as_str());
+    }
+    // Keep the old generation until every replacement exists. If removing old
+    // rules fails, retain the complete new generation and report the actual OS
+    // snapshot rather than rolling back protection after a partial deletion.
+    for name in old {
+        store.remove(&name).map_err(|error| {
+            format!("Could not remove an old LobbyLocker rule: {error}. Firewall state must be verified before retrying.")
+        })?;
+    }
+    let mut remaining: Vec<_> = store
+        .managed_names()?
+        .into_iter()
+        .map(|name| name.to_lowercase())
+        .collect();
+    remaining.sort();
+    if remaining != expected {
+        return Err("LobbyLocker firewall rules do not match the completed operation.".into());
+    }
+    Ok(())
+}
+
+/// A read-only description of native Windows Firewall changes for the CLI.
+pub fn windows_preview(request: &Request) -> Result<String> {
+    let rules = windows_rule_plan(request)?;
+    serde_json::to_string_pretty(&serde_json::json!({
+        "action": if matches!(request, Request::Reset {}) { "reset" } else { "apply" },
+        "group": WINDOWS_GROUP,
+        "rules": rules,
+    }))
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(target_os = "linux")]
@@ -305,15 +356,7 @@ fn execute_privileged(request: &Request) -> Result<()> {
         // A named mutex serializes elevated helpers launched by separate app/CLI
         // processes. The Tauri command guard only covers one desktop process.
         let _lock = acquire_windows_firewall_lock()?;
-        let script = powershell_script(request)?;
-        let output = powershell_command()?
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-            .output()
-            .map_err(|e| e.to_string())?;
-        if !output.status.success() {
-            return Err(String::from_utf8_lossy(&output.stderr).into());
-        }
-        Ok(())
+        crate::windows_firewall::execute(request)
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     Err("Firewall changes are supported on Windows and Linux only.".into())
@@ -457,7 +500,7 @@ pub fn change_with_readback(request: &Request) -> Result<FirewallOutcome> {
     #[cfg(target_os = "windows")]
     if let Request::Apply { rules } = request {
         // Validate scope and paths before requesting administrator credentials.
-        powershell_script(request)?;
+        windows_rule_plan(request)?;
         crate::model::validate_program_files(rules)?;
     }
     #[cfg(target_os = "linux")]
@@ -537,28 +580,99 @@ fn elevated_readback(request: &Request) -> Result<FirewallOutcome> {
     }
     #[cfg(target_os = "windows")]
     {
-        let mut command = powershell_command()?;
-        let path = executable.to_string_lossy().replace('\'', "''");
-        // RunAs cannot redirect stdout. A first-instance, local named pipe
-        // returns the actual rules without a privileged write to a user file.
+        use std::os::windows::{
+            ffi::OsStrExt,
+            io::{AsRawHandle, FromRawHandle, OwnedHandle},
+        };
+        use windows::Win32::{
+            Foundation::RPC_E_CHANGED_MODE,
+            System::Com::{
+                CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
+            },
+        };
+        use windows_sys::Win32::{
+            Foundation::WAIT_OBJECT_0,
+            System::Threading::{GetProcessId, WaitForSingleObject, INFINITE},
+            UI::{
+                Shell::{
+                    ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC,
+                    SEE_MASK_NOCLOSEPROCESS, SEE_MASK_NO_CONSOLE, SHELLEXECUTEINFOW,
+                },
+                WindowsAndMessaging::SW_HIDE,
+            },
+        };
+        struct Apartment(bool);
+        impl Drop for Apartment {
+            fn drop(&mut self) {
+                if self.0 {
+                    unsafe { CoUninitialize() };
+                }
+            }
+        }
+        let initialized =
+            unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) };
+        if initialized.is_err() && initialized != RPC_E_CHANGED_MODE {
+            return Err(format!(
+                "Could not initialize administrator request: {initialized}"
+            ));
+        }
+        let _apartment = Apartment(initialized.is_ok());
+        // RunAs cannot redirect stdout. Keep the bounded, local named pipe and
+        // authenticate its client against the process handle returned by Windows.
         let receiver = crate::readback::Receiver::new()?;
-        let name = receiver.name().to_owned();
-        let script = format!("$ErrorActionPreference='Stop'; try {{ $p=Start-Process -FilePath '{path}' -ArgumentList '--firewall-helper','{payload}','--readback-pipe','{name}' -Verb RunAs -Wait -PassThru; [Console]::WriteLine($p.Id); exit $p.ExitCode }} catch {{ Write-Error $_; exit 1 }}");
-        let output = command
-            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-            .output();
-        let received = receiver.finish();
-        let output = output.map_err(|e| e.to_string())?;
-        let pid = String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse::<u32>()
-            .map_err(|_| {
-                format!(
-                    "Firewall operation failed or UAC was cancelled: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
-                )
-            })?;
-        let (client, bytes) = received?;
+        let file: Vec<u16> = executable
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        let verb: Vec<u16> = "runas".encode_utf16().chain(Some(0)).collect();
+        // Only our validated base64url payload and generated pipe token enter
+        // the argument list; the executable path is passed separately.
+        let arguments: Vec<u16> = format!(
+            "--firewall-helper {payload} --readback-pipe {}",
+            receiver.name(),
+        )
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+        let mut launch = SHELLEXECUTEINFOW {
+            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+            fMask: SEE_MASK_NOCLOSEPROCESS
+                | SEE_MASK_NOASYNC
+                | SEE_MASK_NO_CONSOLE
+                | SEE_MASK_FLAG_NO_UI,
+            lpVerb: verb.as_ptr(),
+            lpFile: file.as_ptr(),
+            lpParameters: arguments.as_ptr(),
+            nShow: SW_HIDE,
+            ..Default::default()
+        };
+        if unsafe { ShellExecuteExW(&mut launch) } == 0 {
+            return Err(format!(
+                "Firewall operation failed or UAC was cancelled: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        if launch.hProcess.is_null() {
+            return Err("Windows did not return a firewall helper process handle.".into());
+        }
+        let process = unsafe { OwnedHandle::from_raw_handle(launch.hProcess) };
+        let pid = unsafe { GetProcessId(process.as_raw_handle()) };
+        if pid == 0 {
+            return Err(format!(
+                "Could not identify firewall helper: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        // UAC may take as long as the user needs. The helper's readback is
+        // consumed concurrently, so FlushFileBuffers cannot deadlock this wait.
+        if unsafe { WaitForSingleObject(process.as_raw_handle(), INFINITE) } != WAIT_OBJECT_0 {
+            return Err(format!(
+                "Could not wait for firewall helper: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let (client, bytes) = receiver.finish()?;
         if client != pid {
             return Err("Firewall readback came from an unexpected process.".into());
         }

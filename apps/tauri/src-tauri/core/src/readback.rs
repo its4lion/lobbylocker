@@ -1,5 +1,5 @@
 //! Windows RunAs readback: local IPC only, bounded, and checked against the
-//! helper PID returned by Start-Process. Never accept a privileged file path.
+//! helper PID returned by ShellExecuteExW. Never accept a privileged file path.
 use crate::{inspection::MAX_READBACK_BYTES, Result};
 use std::{
     io::Write,

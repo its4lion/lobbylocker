@@ -12,6 +12,8 @@ pub mod model;
 #[cfg(target_os = "windows")]
 mod readback;
 pub mod store;
+#[cfg(target_os = "windows")]
+mod windows_firewall;
 
 pub type Result<T> = std::result::Result<T, String>;
 
