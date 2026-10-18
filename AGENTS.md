@@ -17,8 +17,8 @@ Fast inner loops:
 
 ```sh
 cargo check -p lobbylocker-core --all-targets   # ~8s, no GTK/WebKit needed
-cargo test  -p lobbylocker-core                 # 83 tests
-pnpm --filter @lobbylocker/tauri test           # 53 tests
+cargo test  -p lobbylocker-core
+pnpm --filter @lobbylocker/tauri test
 pnpm --filter @lobbylocker/tauri exec vitest run <test-file>
 cargo test -p lobbylocker-core inspection      # single module
 pnpm --filter @lobbylocker/tauri exec tauri build --debug --no-bundle   # compile check without bundling

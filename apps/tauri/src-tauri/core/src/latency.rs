@@ -85,7 +85,9 @@ mod windows_ping {
         // Aligned storage for either reply header, payload, ICMP error and IO_STATUS_BLOCK.
         let mut reply = [0u64; 32];
         let reply_size = std::mem::size_of_val(&reply) as u32;
-        let (count, status, elapsed) = match address {
+        // The reply buffer stays unset until at least one reply arrives; never
+        // interpret it after an empty result.
+        let responded = match address {
             IpAddr::V4(address) => {
                 let handle = IcmpHandle(
                     unsafe { IcmpCreateFile() }
@@ -103,8 +105,11 @@ mod windows_ping {
                         2000,
                     )
                 };
-                let response = unsafe { reply.as_ptr().cast::<ICMP_ECHO_REPLY>().read_unaligned() };
-                (count, response.Status, response.RoundTripTime)
+                (count != 0).then(|| {
+                    let response =
+                        unsafe { reply.as_ptr().cast::<ICMP_ECHO_REPLY>().read_unaligned() };
+                    (response.Status, response.RoundTripTime)
+                })
             }
             IpAddr::V6(address) => {
                 let handle = IcmpHandle(
@@ -140,19 +145,21 @@ mod windows_ping {
                         2000,
                     )
                 };
-                let response = unsafe {
-                    reply
-                        .as_ptr()
-                        .cast::<ICMPV6_ECHO_REPLY_LH>()
-                        .read_unaligned()
-                };
-                (count, response.Status, response.RoundTripTime)
+                (count != 0).then(|| {
+                    let response = unsafe {
+                        reply
+                            .as_ptr()
+                            .cast::<ICMPV6_ECHO_REPLY_LH>()
+                            .read_unaligned()
+                    };
+                    (response.Status, response.RoundTripTime)
+                })
             }
         };
-        if count == 0 || status != 0 {
+        let Some((status, round_trip)) = responded.filter(|(status, _)| *status == 0) else {
             return Err("No ICMP reply (filtered, blocked, or unreachable).".into());
-        }
-        Ok(f64::from(elapsed))
+        };
+        Ok(f64::from(round_trip))
     }
 }
 
