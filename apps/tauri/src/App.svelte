@@ -3,7 +3,12 @@
   import packageInfo from "../package.json";
   import { Backend } from "$lib/backend.svelte";
   import { actionBar, applyReview } from "$lib/action-bar";
-  import { scopeWarning, missingPrograms } from "$lib/firewall";
+  import {
+    scopeWarning,
+    missingPrograms,
+    verificationIssueMessage,
+    verificationIssueRetryable,
+  } from "$lib/firewall";
   import {
     loadLayout,
     saveLayout,
@@ -258,20 +263,21 @@
           >
             <p class="text-destructive">
               {app.t(
-                "Could not verify firewall status. Retry to check which blocks are active.",
+                verificationIssueMessage(app.status?.verificationIssue) ??
+                  "Could not verify firewall status. Retry to check which blocks are active.",
               )}
             </p>
             <details class="mt-2 text-xs text-muted-foreground">
               <summary>{app.t("Error details")}</summary>
               <p class="mt-2" dir="auto">{app.firewallError}</p>
             </details>
-            <Button
-              class="mt-3"
-              size="sm"
-              variant="outline"
-              disabled={app.busy}
-              onclick={() => app.readFirewall()}>{app.t("Retry")}</Button
-            >
+            {#if verificationIssueRetryable(app.status?.verificationIssue)}<Button
+                class="mt-3"
+                size="sm"
+                variant="outline"
+                disabled={app.busy}
+                onclick={() => app.readFirewall()}>{app.t("Retry")}</Button
+              >{/if}
           </div>{/if}
         {#if app.status}
           {#if view === "custom"}{#key customPath}<CustomGame

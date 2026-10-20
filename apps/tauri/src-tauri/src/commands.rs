@@ -2,7 +2,7 @@ use lobbylocker_core::{
     connections::{self, Connection},
     engine::{Engine, Runtime},
     i18n::{Catalogue, Locale},
-    inspection::{RegionState, Verification},
+    inspection::{RegionState, Verification, VerificationIssue},
     installed::{self, Scan},
     latency::PingSample,
     model::{FirewallTarget, Game, Preferences, Protocol, Snapshot},
@@ -39,6 +39,7 @@ pub struct Status {
     inspected_at: Option<u64>,
     verification: Verification,
     verification_error: String,
+    verification_issue: Option<VerificationIssue>,
     dirty: bool,
     message: String,
 }
@@ -57,6 +58,7 @@ impl From<Runtime> for Status {
             inspected_at: state.inspected_at,
             verification: state.verification,
             verification_error: state.verification_error,
+            verification_issue: state.verification_issue,
             dirty: state.dirty,
             message: state.message,
         }

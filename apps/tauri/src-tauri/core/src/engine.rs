@@ -1,7 +1,10 @@
 use crate::{
     catalogue,
     firewall::{self, FirewallOutcome, Request},
-    inspection::{self, Inspection, RegionState, Verification},
+    inspection::{
+        self, Inspection, ReadbackFailure, ReadbackResult, RegionState, Verification,
+        VerificationIssue,
+    },
     latency::{self, PingSample},
     model::{
         resolve_rules, selected_game_ids, selected_targets, FirewallRule, FirewallScope,
@@ -41,6 +44,8 @@ pub struct Runtime {
     pub inspection: Option<Inspection>,
     pub verification: Verification,
     pub verification_error: String,
+    /// Why the last readback failed, when the OS reported a known condition.
+    pub verification_issue: Option<VerificationIssue>,
     /// Comparison baseline only, never active-state evidence. Before the first
     /// successful read this is the loaded selection; afterwards it is native keys.
     pending_baseline: PendingKeys,
@@ -71,6 +76,7 @@ impl Engine {
                 inspection: None,
                 verification: Verification::Unverified,
                 verification_error: String::new(),
+                verification_issue: None,
                 applied_count: None,
                 applied_game_ids: vec![],
                 pending_baseline,
@@ -135,6 +141,7 @@ impl Engine {
         );
         state.inspection = Some(report);
         state.verification_error.clear();
+        state.verification_issue = None;
         Self::reconcile(&mut state);
         state.message = match state.verification {
             Verification::Matched => "Saved selections match active LobbyLocker rules.",
@@ -206,7 +213,7 @@ impl Engine {
         }
     }
 
-    fn invalidate_inspection(&self, error: &str) -> Result<()> {
+    fn invalidate_inspection(&self, failure: &ReadbackFailure) -> Result<()> {
         let mut state = self.state.lock().map_err(|e| e.to_string())?;
         state.applied_count = None;
         state.applied_targets = None;
@@ -214,7 +221,8 @@ impl Engine {
         state.region_states.clear();
         state.inspected_at = None;
         state.verification = Verification::Unverified;
-        state.verification_error = error.into();
+        state.verification_error = failure.message.clone();
+        state.verification_issue = failure.issue;
         // Keep attributed IDs accessible as recovery hints, never active proof.
         Self::reconcile(&mut state);
         state.message =
@@ -415,7 +423,7 @@ impl Engine {
                 self.finish_apply(ids, outcome)
             }
             Err(error) => {
-                self.invalidate_inspection(&error)?;
+                self.invalidate_inspection(&ReadbackFailure::other(error.clone()))?;
                 self.state.lock().map_err(|e| e.to_string())?.message = error.clone();
                 Err(error)
             }
@@ -436,12 +444,18 @@ impl Engine {
             })
     }
 
-    fn accept_readback(&self, result: Result<Inspection>) -> Result<()> {
-        match result.and_then(|report| self.record_inspection(report)) {
-            Ok(()) => Ok(()),
-            Err(error) => {
-                self.invalidate_inspection(&error)?;
-                Err(error)
+    fn accept_readback(&self, result: ReadbackResult<Inspection>) -> Result<()> {
+        match result {
+            Ok(report) => match self.record_inspection(report) {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    self.invalidate_inspection(&ReadbackFailure::other(error.clone()))?;
+                    Err(error)
+                }
+            },
+            Err(failure) => {
+                self.invalidate_inspection(&failure)?;
+                Err(failure.message)
             }
         }
     }
@@ -496,7 +510,7 @@ impl Engine {
         match firewall::change_with_readback(&Request::Reset {}) {
             Ok(outcome) => self.finish_reset(outcome),
             Err(error) => {
-                self.invalidate_inspection(&error)?;
+                self.invalidate_inspection(&ReadbackFailure::other(error.clone()))?;
                 self.state.lock().map_err(|e| e.to_string())?.message = error.clone();
                 Err(error)
             }

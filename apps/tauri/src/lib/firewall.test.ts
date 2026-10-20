@@ -4,6 +4,8 @@ import {
   savedTargets,
   missingPrograms,
   scopeWarning,
+  verificationIssueMessage,
+  verificationIssueRetryable,
 } from "./firewall";
 import type { Game, Status } from "./types";
 
@@ -128,5 +130,24 @@ describe("firewall review", () => {
     app.snapshot.preferences.blockedRegions = [];
     expect(savedTargets(app)).toEqual([]);
     expect(app.appliedTargets).toHaveLength(2);
+  });
+  it("explains each readback cause and only offers a retry that can help", () => {
+    expect(verificationIssueMessage("managedByDeviceManagement")).toContain(
+      "organization manages this device",
+    );
+    expect(verificationIssueMessage("firewallUnavailable")).toContain(
+      "Windows Firewall is turned off",
+    );
+    expect(verificationIssueMessage("unsupportedFilters")).toContain(
+      "cannot verify",
+    );
+    // An unknown cause keeps the generic explanation instead of a wrong one.
+    expect(verificationIssueMessage(null)).toBeNull();
+    expect(verificationIssueMessage(undefined)).toBeNull();
+    // Retrying cannot change a policy set by the user's organization.
+    expect(verificationIssueRetryable("managedByDeviceManagement")).toBe(false);
+    expect(verificationIssueRetryable("firewallUnavailable")).toBe(true);
+    expect(verificationIssueRetryable("unsupportedFilters")).toBe(true);
+    expect(verificationIssueRetryable(null)).toBe(true);
   });
 });

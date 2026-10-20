@@ -1,5 +1,8 @@
 export type Protocol = "udp" | "tcp" | "any";
 export type RegionState = "blocked" | "partial" | "none" | "unknown";
+/** Why the OS could not confirm which rules are active. */
+export type VerificationIssue =
+  "managedByDeviceManagement" | "firewallUnavailable" | "unsupportedFilters";
 export interface Endpoint {
   id: string;
   address: string;
@@ -67,6 +70,7 @@ export interface Status {
   inspectedAt?: number | null;
   verification?: "unverified" | "matched" | "empty" | "different";
   verificationError?: string;
+  verificationIssue?: VerificationIssue | null;
   dirty: boolean;
   message: string;
 }

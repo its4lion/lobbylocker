@@ -136,13 +136,15 @@ fn unreadable_retry_preserves_a_known_difference_but_never_active_status() {
     engine.record_inspection(Inspection::default()).unwrap();
     assert!(engine.runtime().dirty);
     engine
-        .invalidate_inspection("Authorization cancelled")
+        .invalidate_inspection(&ReadbackFailure::other("Authorization cancelled"))
         .unwrap();
     assert!(engine.runtime().dirty);
     assert!(engine.runtime().applied_count.is_none());
     engine.record_inspection(report).unwrap();
     assert!(!engine.runtime().dirty);
-    engine.invalidate_inspection("Read failed").unwrap();
+    engine
+        .invalidate_inspection(&ReadbackFailure::other("Read failed"))
+        .unwrap();
     assert!(!engine.runtime().dirty);
 }
 

@@ -131,6 +131,22 @@ fn windows_invalid_addresses_fail_the_entire_readback_instead_of_skipping_rules(
     assert!(windows_snapshot(&json).is_err());
 }
 #[test]
+fn windows_readback_failures_carry_a_machine_readable_issue() {
+    let mut json = windows();
+    // Unsupported filters and a disabled firewall are different problems and
+    // need different answers, so they must not share one error.
+    json["supported"] = json!(false);
+    let failure = windows_snapshot(&json).unwrap_err();
+    assert_eq!(failure.issue, Some(VerificationIssue::UnsupportedFilters));
+    json["supported"] = json!(true);
+    json["enforced"] = json!(false);
+    let failure = windows_snapshot(&json).unwrap_err();
+    assert_eq!(failure.issue, Some(VerificationIssue::FirewallUnavailable));
+    // A readback with no rules is not a failure even when enforcement is off.
+    json["rules"] = json!([]);
+    assert!(windows_snapshot(&json).is_ok());
+}
+#[test]
 fn windows_permission_errors_use_hresult_not_localized_messages() {
     for code in [0x80070005u32, 0x80041003] {
         let message = "تم رفض الوصول.".to_owned();

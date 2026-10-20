@@ -17,18 +17,96 @@ use std::{
 
 pub const MAX_READBACK_BYTES: usize = 5_000_000;
 
+/// Why the OS could not confirm which rules are active. The UI explains each
+/// case differently, so the reason must survive the trip to the frontend.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum VerificationIssue {
+    /// Device management may override local firewall rules; effective policy
+    /// cannot be read from the local policy store.
+    ManagedByDeviceManagement,
+    /// The firewall itself is off, or a policy blocks local rules.
+    FirewallUnavailable,
+    /// LobbyLocker rules exist but use filters that cannot be verified.
+    UnsupportedFilters,
+}
+
+/// A failed readback with a machine-readable reason. The message stays an OS
+/// diagnostic and is never translated; only the issue kind drives the
+/// user-facing explanation.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReadbackFailure {
+    pub message: String,
+    #[serde(default)]
+    pub issue: Option<VerificationIssue>,
+}
+
+impl std::fmt::Display for ReadbackFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl ReadbackFailure {
+    pub fn other(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            issue: None,
+        }
+    }
+}
+
+impl From<String> for ReadbackFailure {
+    fn from(message: String) -> Self {
+        Self::other(message)
+    }
+}
+
+impl From<&str> for ReadbackFailure {
+    fn from(message: &str) -> Self {
+        Self::other(message)
+    }
+}
+
+/// A readback result that keeps its machine-readable reason.
+pub type ReadbackResult<T> = std::result::Result<T, ReadbackFailure>;
+
 /// Keep permission failures distinct from invalid OS output. Parsing errors must
 /// never cause another authentication prompt, and helper IPC still uses strings.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum InspectionError {
     PermissionDenied(String),
+    /// A known, actionable condition. The message stays OS-specific and
+    /// untranslated; the issue kind drives the user-facing explanation.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    Issue(VerificationIssue, String),
     Other(String),
+}
+
+impl InspectionError {
+    /// The actionable reason, when this failure has one.
+    pub(crate) fn issue(&self) -> Option<VerificationIssue> {
+        match self {
+            Self::Issue(issue, _) => Some(*issue),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn failure(&self) -> ReadbackFailure {
+        ReadbackFailure {
+            message: self.to_string(),
+            issue: self.issue(),
+        }
+    }
 }
 
 impl std::fmt::Display for InspectionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PermissionDenied(message) | Self::Other(message) => f.write_str(message),
+            Self::PermissionDenied(message) | Self::Issue(_, message) | Self::Other(message) => {
+                f.write_str(message)
+            }
         }
     }
 }
@@ -698,15 +776,24 @@ struct WindowsRule {
 }
 
 pub fn windows_keys(json: &Value) -> Result<BTreeSet<RuleKey>> {
-    Ok(windows_snapshot(json)?.keys())
+    Ok(windows_snapshot(json)
+        .map_err(|failure| failure.message)?
+        .keys())
 }
 
-pub fn windows_snapshot(json: &Value) -> Result<Inspection> {
+pub fn windows_snapshot(json: &Value) -> std::result::Result<Inspection, ReadbackFailure> {
     let report: WindowsReport = serde_json::from_value(json.clone()).map_err(|e| e.to_string())?;
-    if !report.supported || (!report.enforced && !report.rules.is_empty()) {
-        return Err(
-            "Windows firewall is disabled or LobbyLocker rules have unsupported filters.".into(),
-        );
+    if !report.supported {
+        return Err(ReadbackFailure {
+            message: "LobbyLocker firewall rules use filters that cannot be verified.".into(),
+            issue: Some(VerificationIssue::UnsupportedFilters),
+        });
+    }
+    if !report.enforced && !report.rules.is_empty() {
+        return Err(ReadbackFailure {
+            message: "Windows Firewall is turned off, or a policy prevents local firewall rules from taking effect.".into(),
+            issue: Some(VerificationIssue::FirewallUnavailable),
+        });
     }
     if report.rules.len() > 10000 {
         return Err("Too many firewall rules to verify.".into());
@@ -736,9 +823,10 @@ pub fn windows_snapshot(json: &Value) -> Result<Inspection> {
                 },
             })
         })
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()
+        .map_err(ReadbackFailure::other)?;
     let snapshot = Inspection { rules };
-    snapshot.validate()?;
+    snapshot.validate().map_err(ReadbackFailure::other)?;
     Ok(snapshot)
 }
 
@@ -841,8 +929,8 @@ fn query(command: &mut std::process::Command) -> InspectionResult<Value> {
         .map_err(|e| format!("Invalid firewall inspection response: {e}").into())
 }
 
-pub fn inspect() -> Result<Inspection> {
-    inspect_with_error().map_err(|error| error.to_string())
+pub fn inspect() -> ReadbackResult<Inspection> {
+    inspect_with_error().map_err(|error| error.failure())
 }
 
 pub(crate) fn inspect_with_error() -> InspectionResult<Inspection> {

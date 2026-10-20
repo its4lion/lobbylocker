@@ -1,7 +1,34 @@
-import type { FirewallTarget, Status } from "./types";
+import type { FirewallTarget, Status, VerificationIssue } from "./types";
 
 export function windowsBlocking(status: Status | null): boolean {
   return status?.snapshot.platform === "windows";
+}
+
+/**
+ * A user-facing explanation for a failed readback. Each cause needs a
+ * different response, so an opaque "could not verify" is not enough.
+ * Returns null when the failure has no known cause.
+ */
+export function verificationIssueMessage(
+  issue: VerificationIssue | null | undefined,
+): string | null {
+  switch (issue) {
+    case "managedByDeviceManagement":
+      return "Your organization manages this device. LobbyLocker cannot confirm that its blocks are active.";
+    case "firewallUnavailable":
+      return "Windows Firewall is turned off, or a policy is blocking local firewall rules. Turn the firewall on and try again.";
+    case "unsupportedFilters":
+      return "LobbyLocker found firewall rules it cannot verify. Reset and apply again to replace them.";
+    default:
+      return null;
+  }
+}
+
+/** A retry only helps when the cause can change on the user's machine. */
+export function verificationIssueRetryable(
+  issue: VerificationIssue | null | undefined,
+): boolean {
+  return issue !== "managedByDeviceManagement";
 }
 
 export function scopeWarning(status: Status | null): string {

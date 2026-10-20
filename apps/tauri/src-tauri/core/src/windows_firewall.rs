@@ -5,7 +5,9 @@ use crate::{
         replace_windows_rules, windows_rule_plan, Request, WindowsRuleSpec, WindowsRuleStore,
         WINDOWS_GROUP,
     },
-    inspection::{self, Inspection, InspectionError, InspectionResult, MAX_READBACK_BYTES},
+    inspection::{
+        self, Inspection, InspectionError, InspectionResult, VerificationIssue, MAX_READBACK_BYTES,
+    },
     Result,
 };
 use serde_json::{json, Value};
@@ -385,7 +387,8 @@ fn reject_unverified_mdm_policy() -> InspectionResult<()> {
         },
     )?;
     if enrolled.as_bool() {
-        return Err(InspectionError::Other(
+        return Err(InspectionError::Issue(
+            VerificationIssue::ManagedByDeviceManagement,
             "Windows device management may override local firewall rules. Effective MDM firewall policy cannot yet be verified by LobbyLocker.".into(),
         ));
     }
@@ -530,9 +533,10 @@ fn rule_row(owned: &OwnedRule) -> InspectionResult<Option<Value>> {
             rule3.SecureFlags()
         })? == 0;
     if !supported {
-        return Err(
-            "Windows firewall is disabled or LobbyLocker rules have unsupported filters.".into(),
-        );
+        return Err(InspectionError::Issue(
+            VerificationIssue::UnsupportedFilters,
+            "LobbyLocker firewall rules use filters that cannot be verified.".into(),
+        ));
     }
     let ports = if matches!(protocol, 6 | 17) {
         if !any(&native("Could not inspect local firewall ports", unsafe {
@@ -593,7 +597,10 @@ pub(crate) fn inspect() -> InspectionResult<Inspection> {
     // Reuse the established parser for canonical address, program, protocol,
     // ports, ownership attribution and effective-enforcement checks.
     inspection::windows_snapshot(&json!({ "enforced": enforced, "supported": true, "rules": rows }))
-        .map_err(InspectionError::from)
+        .map_err(|failure| match failure.issue {
+            Some(issue) => InspectionError::Issue(issue, failure.message),
+            None => InspectionError::Other(failure.message),
+        })
 }
 
 #[cfg(test)]

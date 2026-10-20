@@ -1,5 +1,5 @@
 use crate::{
-    inspection::{self, Inspection},
+    inspection::{self, Inspection, ReadbackFailure, ReadbackResult},
     model::{normalize_address, parse_ports, windows_program, FirewallRule, Protocol},
     Result,
 };
@@ -258,7 +258,7 @@ pub fn helper_entry() -> Option<i32> {
         };
         let mut bytes = serde_json::to_vec(&outcome).map_err(|e| e.to_string())?;
         if bytes.len() > inspection::MAX_READBACK_BYTES {
-            outcome.inspection = Err("Firewall readback is too large.".into());
+            outcome.inspection = Err(ReadbackFailure::other("Firewall readback is too large."));
             bytes = serde_json::to_vec(&outcome).map_err(|e| e.to_string())?;
         }
         use std::io::Write;
@@ -405,8 +405,11 @@ pub fn elevate(request: &Request) -> Result<()> {
     if let Some(error) = outcome.operation_error {
         return Err(error);
     }
-    outcome.inspection.map(|_| ()).map_err(|error| {
-        format!("Firewall operation completed, but its result could not be read: {error}")
+    outcome.inspection.map(|_| ()).map_err(|failure| {
+        format!(
+            "Firewall operation completed, but its result could not be read: {}",
+            failure.message
+        )
     })
 }
 
@@ -433,7 +436,7 @@ pub fn change_with_readback(request: &Request) -> Result<FirewallOutcome> {
 }
 
 /// No files, locks, config, or firewall state are written by a Verify request.
-pub fn inspect_firewall(elevated: bool) -> Result<Inspection> {
+pub fn inspect_firewall(elevated: bool) -> ReadbackResult<Inspection> {
     inspect_with_fallback(inspection::inspect_with_error(), elevated, || {
         elevated_readback(&Request::Verify {})?.inspection
     })
@@ -442,20 +445,19 @@ pub fn inspect_firewall(elevated: bool) -> Result<Inspection> {
 fn inspect_with_fallback(
     direct: inspection::InspectionResult<Inspection>,
     elevated: bool,
-    authenticate: impl FnOnce() -> Result<Inspection>,
-) -> Result<Inspection> {
+    authenticate: impl FnOnce() -> ReadbackResult<Inspection>,
+) -> ReadbackResult<Inspection> {
     match direct {
         Ok(report) => Ok(report),
         Err(inspection::InspectionError::PermissionDenied(_)) if elevated => authenticate(),
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(error.failure()),
     }
 }
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FirewallOutcome {
     pub operation_error: Option<String>,
-    pub inspection: Result<Inspection>,
+    pub inspection: ReadbackResult<Inspection>,
 }
 
 impl FirewallOutcome {
@@ -513,7 +515,7 @@ fn elevated_readback(request: &Request) -> Result<FirewallOutcome> {
         };
         Ok(FirewallOutcome {
             operation_error,
-            inspection: crate::windows_firewall::inspect().map_err(|e| e.to_string()),
+            inspection: crate::windows_firewall::inspect().map_err(|error| error.failure()),
         })
     }
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]

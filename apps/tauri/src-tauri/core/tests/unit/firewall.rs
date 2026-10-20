@@ -28,7 +28,7 @@ fn verification_authenticates_once_only_for_permission_denied_when_allowed() {
         },
     )
     .unwrap_err();
-    assert_eq!(error, "UAC cancelled");
+    assert_eq!(error.message, "UAC cancelled");
     assert_eq!(calls.get(), 2);
 }
 #[test]
@@ -46,7 +46,8 @@ fn verification_never_prompts_for_parsing_errors_or_readable_rules() {
                 true,
                 || panic!("A non-permission failure must not launch an elevated helper"),
             )
-            .unwrap_err(),
+            .unwrap_err()
+            .message,
             message
         );
     }
@@ -62,7 +63,8 @@ fn verification_never_prompts_for_parsing_errors_or_readable_rules() {
             false,
             || panic!("A caller that disallows elevation must not authenticate"),
         )
-        .unwrap_err(),
+        .unwrap_err()
+        .message,
         "Read denied"
     );
 }

@@ -271,6 +271,7 @@ fn wire_status_has_no_private_policy_and_uses_camel_case() {
         inspected_at: None,
         verification: Verification::Unverified,
         verification_error: String::new(),
+        verification_issue: None,
         dirty: true,
         message: "test".into(),
     })
