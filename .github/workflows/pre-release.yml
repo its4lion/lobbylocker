@@ -1,141 +1,67 @@
-name: Prepare Release
-run-name: Prepare v${{ inputs.version }}
+name: Pre-Release
+
+run-name: Build release candidate ${{ inputs.version || 'auto' }}
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version to bump to, without the v prefix (for example, 0.0.2)
-        required: true
+        description: Optional version override (for example, 0.1.0); derived automatically when empty
+        required: false
         type: string
 
 concurrency:
-  group: prepare-release-${{ github.ref }}
+  group: release-candidate
   cancel-in-progress: false
 
 permissions:
   contents: read
 
-env:
-  VERSION: ${{ inputs.version }}
-
 jobs:
-  validate:
-    name: Bump and validate version
+  prepare:
+    name: Resolve the candidate version
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write
     outputs:
-      sha: ${{ steps.commit.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      sha: ${{ steps.version.outputs.sha }}
     steps:
-      - name: Require a branch
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" != "branch" ]]; then
-            echo "Prepare Release must run from a branch so the version bump can be committed." >&2
-            exit 1
-          fi
       - uses: actions/checkout@v7
-      - name: Bump and validate all version metadata
-        shell: bash
-        run: |
-          python3 <<'PY'
-          import json
-          import os
-          import re
-          import tomllib
-          from pathlib import Path
-
-          version = os.environ["VERSION"]
-          if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
-              raise SystemExit(f"Invalid stable semantic version: {version}")
-
-          current = json.loads(Path("package.json").read_text(encoding="utf-8"))["version"]
-          if tuple(map(int, version.split("."))) < tuple(map(int, current.split("."))):
-              raise SystemExit(f"Cannot lower the version from {current} to {version}")
-
-          updates = {}
-
-          def bump(file, pattern, expected_count=1):
-              text = Path(file).read_text(encoding="utf-8")
-              updated, count = re.subn(pattern, lambda match: f'{match[1]}"{version}"', text)
-              if count != expected_count:
-                  raise SystemExit(f"{file}: expected {expected_count} version entries, found {count}")
-              updates[file] = updated
-              return updated
-
-          json_files = [
-              "package.json",
-              "apps/tauri/package.json",
-              "packages/ui/package.json",
-              "apps/tauri/src-tauri/tauri.conf.json",
-          ]
-          for file in json_files:
-              updated = bump(file, r'(?m)^([ \t]*"version"[ \t]*:[ \t]*)"[^"\n]*"')
-              actual = json.loads(updated)["version"]
-              if actual != version:
-                  raise SystemExit(f"{file} has version {actual}, expected {version}")
-
-          updated = bump("Cargo.toml", r'(?m)^(\[workspace\.package\]\nversion = )"[^"\n]*"')
-          actual = tomllib.loads(updated)["workspace"]["package"]["version"]
-          if actual != version:
-              raise SystemExit(f"Cargo.toml has version {actual}, expected {version}")
-
-          updated = bump(
-              "Cargo.lock",
-              r'(?m)^(\[\[package\]\]\nname = "(?:lobbylocker-core|lobbylocker-tauri)"\nversion = )"[^"\n]*"',
-              expected_count=2,
-          )
-          packages = tomllib.loads(updated)["package"]
-          workspace = {
-              package["name"]: package["version"]
-              for package in packages
-              if package["name"] in {"lobbylocker-core", "lobbylocker-tauri"}
-          }
-          expected = {"lobbylocker-core": version, "lobbylocker-tauri": version}
-          if workspace != expected:
-              raise SystemExit(f"Cargo.lock workspace versions are {workspace}, expected {expected}")
-
-          # Preserve formatting and dependency versions; write only after every file validates.
-          for file, updated in updates.items():
-              Path(file).write_text(updated, encoding="utf-8")
-          print(f"Updated all version metadata to {version}")
-          PY
-      - name: Ensure the tag and release do not exist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Resolve the version
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" >/dev/null 2>&1; then
-            echo "Tag v${VERSION} already exists." >&2
-            exit 1
+          set -euo pipefail
+          git ls-remote --tags origin 'refs/tags/v*' \
+            | awk '{print $2}' \
+            | sed 's#^refs/tags/##' \
+            | sed 's#\^{}$##' \
+            | sort -u > tags.txt
+
+          if [[ -n "${REQUESTED_VERSION}" ]]; then
+            version="${REQUESTED_VERSION}"
+          else
+            version=$(python3 scripts/bump-version.py derive-stable --tags-file tags.txt)
           fi
-          if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            echo "Release v${VERSION} already exists." >&2
-            exit 1
-          fi
-      - name: Commit and push version bump
-        id: commit
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json apps/tauri/package.json packages/ui/package.json \
-            apps/tauri/src-tauri/tauri.conf.json Cargo.toml Cargo.lock
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: bump version to ${VERSION}"
-            git push origin "HEAD:${GITHUB_REF}"
-          fi
+          echo "Building candidate v${version}"
+          python3 scripts/bump-version.py set "${version}" --dry-run
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
   source-quality:
     name: Format, typecheck, and frontend tests
-    needs: validate
+    needs: prepare
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -151,7 +77,7 @@ jobs:
 
   rust-linux:
     name: Rust tests and Clippy / Arch Linux
-    needs: validate
+    needs: prepare
     runs-on: ubuntu-24.04
     container: archlinux:base-devel
     steps:
@@ -159,7 +85,7 @@ jobs:
         run: pacman -Syu --noconfirm git gtk3 webkit2gtk-4.1 librsvg pkgconf nodejs pnpm
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: dtolnay/rust-toolchain@1.90.0
         with:
           components: clippy
@@ -172,13 +98,13 @@ jobs:
 
   rust-ubuntu:
     name: Rust tests and Clippy / Ubuntu 24.04
-    needs: validate
+    needs: prepare
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
-      - name: Install system dependencies
+          ref: ${{ needs.prepare.outputs.sha }}
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev
@@ -199,12 +125,12 @@ jobs:
 
   rust-windows:
     name: Rust tests and Clippy / Windows
-    needs: validate
+    needs: prepare
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -220,19 +146,53 @@ jobs:
       - run: cargo test --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  gate:
+    name: Check the release gates
+    needs: [prepare, source-quality, rust-linux, rust-ubuntu, rust-windows]
+    if: always()
+    runs-on: ubuntu-24.04
+    outputs:
+      allowed: ${{ steps.gate.outputs.allowed }}
+    steps:
+      - name: Decide whether to build
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          allowed=true
+          for result in "${{ needs.source-quality.result }}" "${{ needs.rust-linux.result }}" "${{ needs.rust-ubuntu.result }}" "${{ needs.rust-windows.result }}"; do
+            if [[ "${result}" != "success" ]]; then
+              allowed=false
+            fi
+          done
+          echo "allowed=${allowed}" >> "${GITHUB_OUTPUT}"
+
   build-arch:
     name: Build Arch package
-    needs: [validate, source-quality, rust-linux, rust-ubuntu, rust-windows]
+    needs: [prepare, gate]
+    if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-24.04
     container: archlinux:base-devel
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm git gtk3 webkit2gtk-4.1 librsvg pkgconf nodejs pnpm rustup nftables polkit namcap
+        run: pacman -Syu --noconfirm git gtk3 webkit2gtk-4.1 librsvg pkgconf nodejs pnpm rustup nftables polkit namcap python
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
       - name: Install Rust toolchain
         run: rustup default 1.90.0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Apply the candidate version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: python3 scripts/bump-version.py set "${VERSION}"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @lobbylocker/tauri icons
       - name: Build release executable
@@ -249,14 +209,7 @@ jobs:
           install -Dm644 packaging/arch/lobbylocker-reset-firewall.hook "${package_root}/payload/lobbylocker-reset-firewall.hook"
           install -Dm644 LICENSE "${package_root}/payload/LICENSE"
           cp packaging/arch/PKGBUILD.release "${package_root}/PKGBUILD"
-          if [[ "${VERSION}" == *-* ]]; then
-            arch_version="${VERSION%%-*}pre.${VERSION#*-}"
-            arch_version="${arch_version%%+*}"
-            arch_version="${arch_version//-/.}"
-          else
-            arch_version="${VERSION%%+*}"
-          fi
-          sed -i "s/^pkgver=.*/pkgver=${arch_version}/" "${package_root}/PKGBUILD"
+          sed -i "s/^pkgver=.*/pkgver=${VERSION%%+*}/" "${package_root}/PKGBUILD"
           useradd --create-home builder
           chown -R builder:builder "${package_root}"
           runuser -u builder -- bash -lc "cd '${package_root}' && makepkg --noconfirm"
@@ -274,17 +227,21 @@ jobs:
 
   build-appimage:
     name: Build AppImage
-    needs: [validate, source-quality, rust-linux, rust-ubuntu, rust-windows]
+    needs: [prepare, gate]
+    if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-22.04
     environment: release-signing
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev patchelf
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -292,11 +249,17 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
+      - name: Apply the candidate version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: python3 scripts/bump-version.py set "${VERSION}"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @lobbylocker/tauri icons
-      - run: pnpm --filter @lobbylocker/tauri exec tauri build --bundles appimage
+      - name: Build the AppImage
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: pnpm --filter @lobbylocker/tauri exec tauri build --bundles appimage
       - uses: actions/upload-artifact@v7
         with:
           name: appimage
@@ -307,16 +270,20 @@ jobs:
 
   build-ubuntu:
     name: Build Ubuntu 24.04 DEB
-    needs: [validate, source-quality, rust-linux, rust-ubuntu, rust-windows]
+    needs: [prepare, gate]
+    if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev patchelf
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -324,12 +291,14 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
+      - name: Apply the candidate version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: python3 scripts/bump-version.py set "${VERSION}"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @lobbylocker/tauri icons
-      - name: Build package-managed DEB
-        run: >-
-          pnpm --filter @lobbylocker/tauri exec tauri build --bundles deb
-          --config src-tauri/tauri.no-updater-artifacts.conf.json
+      - run: pnpm --filter @lobbylocker/tauri exec tauri build --bundles deb --config src-tauri/tauri.no-updater-artifacts.conf.json
       - uses: actions/upload-artifact@v7
         with:
           name: ubuntu-deb
@@ -338,13 +307,17 @@ jobs:
 
   build-windows:
     name: Build Windows NSIS installer
-    needs: [validate, source-quality, rust-linux, rust-ubuntu, rust-windows]
+    needs: [prepare, gate]
+    if: needs.gate.outputs.allowed == 'true'
     runs-on: windows-2025
     environment: release-signing
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -352,11 +325,17 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
+      - name: Apply the candidate version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        shell: bash
+        run: python scripts/bump-version.py set "${VERSION}"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @lobbylocker/tauri icons
-      - run: pnpm --filter @lobbylocker/tauri exec tauri build --bundles nsis
+      - name: Build the NSIS installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: pnpm --filter @lobbylocker/tauri exec tauri build --bundles nsis
       - uses: actions/upload-artifact@v7
         with:
           name: windows-nsis
@@ -365,16 +344,26 @@ jobs:
             target/release/bundle/nsis/*.exe.sig
           if-no-files-found: error
 
-  draft:
-    name: Create draft release
-    needs: [validate, build-arch, build-appimage, build-ubuntu, build-windows]
+  candidate:
+    name: Create the release candidate draft
+    needs:
+      [prepare, gate, build-arch, build-appimage, build-ubuntu, build-windows]
+    if: >-
+      always() &&
+      needs.gate.outputs.allowed == 'true' &&
+      needs.build-arch.result == 'success' &&
+      needs.build-appimage.result == 'success' &&
+      needs.build-ubuntu.result == 'success' &&
+      needs.build-windows.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ needs.validate.outputs.sha }}
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/download-artifact@v8
         with:
           path: release-assets
@@ -383,18 +372,31 @@ jobs:
         shell: bash
         run: |
           (cd release-assets && find . -maxdepth 1 -type f ! -name 'LobbyLocker-SHA256SUMS.txt' -printf '%f\0' | sort -z | xargs -0 sha256sum) > release-assets/LobbyLocker-SHA256SUMS.txt
-      - name: Create tag and draft release
+      - name: Create the draft
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ needs.validate.outputs.sha }}
+          RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
         run: |
-          args=(
-            "v${VERSION}"
-            release-assets/*
-            --draft
-            --generate-notes
-            --target "${RELEASE_SHA}"
-            --title "LobbyLocker v${VERSION}"
-          )
-          gh release create "${args[@]}"
+          set -euo pipefail
+          tag="v${VERSION}"
+
+          state=$(gh api "repos/${GITHUB_REPOSITORY}/releases" --jq "[.[] | select(.tag_name == \"${tag}\")] | .[0] | if . == null then \"missing\" elif .draft then \"draft\" else \"published\" end")
+          if [[ "${state}" == "published" ]]; then
+            echo "Release ${tag} is already published." >&2
+            exit 1
+          fi
+          if [[ "${state}" == "draft" ]]; then
+            echo "Replacing the existing draft ${tag}."
+            gh release delete "${tag}" --repo "${GITHUB_REPOSITORY}" --yes
+          fi
+
+          notes="Release candidate for v${VERSION}, built from commit ${RELEASE_SHA}. Publish it with the Publish Updater workflow, or publish this draft by hand."
+
+          gh release create "${tag}" release-assets/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --draft \
+            --target "${RELEASE_SHA}" \
+            --title "LobbyLocker v${VERSION}" \
+            --notes "${notes}"

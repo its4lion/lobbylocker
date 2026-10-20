@@ -18,6 +18,60 @@ permissions:
   contents: read
 
 jobs:
+  version-script:
+    name: Release version script
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Check the version script
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version=$(python3 scripts/bump-version.py derive-stable --tags-file /dev/null)
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unexpected derived version: ${version}" >&2
+            exit 1
+          fi
+
+          # Build metadata is not a valid release version.
+          if python3 scripts/bump-version.py set "${version}+build.1" --dry-run; then
+            echo "Build metadata must be rejected." >&2
+            exit 1
+          fi
+
+          # Writing the version must touch every metadata file and nothing else.
+          work=$(mktemp -d)
+          mkdir -p "${work}/apps/tauri/src-tauri" "${work}/packages/ui" "${work}/scripts"
+          cp package.json Cargo.toml Cargo.lock "${work}/"
+          cp apps/tauri/package.json "${work}/apps/tauri/"
+          cp apps/tauri/src-tauri/tauri.conf.json "${work}/apps/tauri/src-tauri/"
+          cp packages/ui/package.json "${work}/packages/ui/"
+          cp scripts/bump-version.py "${work}/scripts/"
+          (cd "${work}" && python3 scripts/bump-version.py set 9.9.9)
+
+          for file in \
+            "${work}/package.json" \
+            "${work}/apps/tauri/package.json" \
+            "${work}/apps/tauri/src-tauri/tauri.conf.json" \
+            "${work}/packages/ui/package.json"; do
+            if ! grep -q '"version": "9.9.9"' "${file}"; then
+              echo "${file} was not updated." >&2
+              exit 1
+            fi
+          done
+          if ! grep -q '^version = "9.9.9"' "${work}/Cargo.toml"; then
+            echo "Cargo.toml was not updated." >&2
+            exit 1
+          fi
+          if [[ $(grep -c '^version = "9.9.9"$' "${work}/Cargo.lock") -ne 2 ]]; then
+            echo "Cargo.lock was not updated." >&2
+            exit 1
+          fi
+
   frontend:
     name: Frontend
     runs-on: ubuntu-24.04

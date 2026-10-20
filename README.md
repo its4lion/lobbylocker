@@ -57,6 +57,12 @@ Get the latest version from [GitHub Releases](https://github.com/its4lion/LobbyL
 Linux needs `nftables`, `pkexec`, and a working desktop polkit agent. Windows
 builds are unsigned and may show a SmartScreen warning.
 
+> [!NOTE]
+> **Pre-releases:** a release candidate is built as a **draft** on the
+> [Releases page](https://github.com/its4lion/LobbyLocker/releases) and is
+> published only when it is ready, so a stable release is always a build you
+> have already tested. Prereleases are never sent to the in-app updater.
+
 ## How to use
 
 1. Download and open LobbyLocker, then choose your game. On Windows, choose

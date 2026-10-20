@@ -114,7 +114,8 @@ i18n:
 - Data dir overrides: `LOBBYLOCKER_DATA_DIR`, `LOBBYLOCKER_LOCALES_DIR` (see `data_path()` in `main.rs`).
 - `pnpm dev` (Tauri) vs `pnpm --filter @lobbylocker/tauri web:dev`: the latter is browser-only with no backend and the UI says so rather than faking data.
 - A `(deleted)` executable path on Linux means a rebuild replaced the binary under a running instance; restart the app instead of trying to make Apply work.
-- Release versions are bumped by `.github/workflows/prepare-release.yml` across `package.json`, `apps/tauri/package.json`, `packages/ui/package.json`, `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock`. Do not hand-edit one of them alone.
+- Release versions are bumped by `scripts/bump-version.py` across `package.json`, `apps/tauri/package.json`, `packages/ui/package.json`, `tauri.conf.json`, `Cargo.toml`, and `Cargo.lock`. Do not hand-edit one of them alone.
+- Releasing is two manual steps. `.github/workflows/pre-release.yml` builds a **release candidate** (signed AppImage/DEB/Arch/NSIS) with the next stable version and leaves it as a **draft**; nothing is committed to `main`. `.github/workflows/publish-updater.yml` then publishes that draft (committing the version bump first) and writes the signed `updater` feed — no rebuild. It also runs on `release: published`, so publishing the draft by hand still refreshes the feed.
 
 ## Gotchas
 
