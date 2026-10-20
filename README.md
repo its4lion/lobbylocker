@@ -65,8 +65,8 @@ builds are unsigned and may show a SmartScreen warning.
 
 ## How to use
 
-1. Download and open LobbyLocker, then choose your game. On Windows, choose
-   the game's actual `.exe` if needed.
+1. Download and open LobbyLocker, then choose your game. Supported Windows games'
+   executables are detected automatically.
 2. Turn on the switches for servers or regions you **don't** want to play on.
 3. Approve the permission prompt. Switch changes apply automatically.
 
@@ -75,6 +75,10 @@ Blocks stay active after you close the app. Switch them off to unblock, or use
 
 ## More options
 
+- **Blocking scope (Windows):** **Settings → Blocking** offers **Selected games**
+  or **All apps on this PC**. All-apps blocking needs no executable and affects
+  other apps using the same server addresses. Apply changes to update existing
+  blocks. Executable paths are tucked under **Game executables** when needed.
 - **Compact mode:** use **Collapse app** / **Expand app** in the header.
 - **Ping:** use **Check ping** to check all servers with a ping target or just
   one. Results appear in the cards and never change blocking selections.
@@ -87,7 +91,7 @@ Blocks stay active after you close the app. Switch them off to unblock, or use
 > [!WARNING]
 >
 > - **Linux blocks addresses system-wide**, which can affect other apps. Windows
->   blocks only the game executable you select.
+>   can block selected game executables or all apps, as chosen in Settings.
 > - LobbyLocker is in beta. Server lists can go out of date, and parties or relays
 >   can still put you in an unexpected region. If a match won't connect, use
 >   **Reset**.

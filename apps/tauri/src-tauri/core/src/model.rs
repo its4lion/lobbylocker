@@ -69,6 +69,10 @@ pub struct Preferences {
     /// Recovery hint only, not proof that firewall rules are still active.
     #[serde(default)]
     pub last_applied_game_ids: Vec<String>,
+    /// Windows can explicitly block selected servers for all apps. Old configs
+    /// remain executable-scoped; a missing program never widens a rule.
+    #[serde(default)]
+    pub windows_blocking_scope: FirewallScope,
     #[serde(default = "default_language")]
     pub language: String,
 }
@@ -86,6 +90,7 @@ impl Default for Preferences {
             excluded_game_library_paths: vec![],
             library_game_ids: vec![],
             last_applied_game_ids: vec![],
+            windows_blocking_scope: FirewallScope::Executable,
             language: default_language(),
         }
     }
@@ -328,18 +333,20 @@ pub struct FirewallRule {
     pub program: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum FirewallScope {
     SystemWide,
+    #[default]
     Executable,
 }
 
-impl FirewallScope {
-    pub fn native() -> Self {
+impl Preferences {
+    pub fn firewall_scope(&self) -> FirewallScope {
         if cfg!(target_os = "windows") {
-            Self::Executable
+            self.windows_blocking_scope
         } else {
-            Self::SystemWide
+            FirewallScope::SystemWide
         }
     }
 }
@@ -380,7 +387,7 @@ pub fn validate_program_files(rules: &[FirewallRule]) -> Result<()> {
 
 /// Preserve attribution even when multiple games share a deduplicated OS rule.
 pub fn selected_targets(games: &[Game], preferences: &Preferences) -> Vec<FirewallTarget> {
-    selected_targets_for_scope(games, preferences, FirewallScope::native())
+    selected_targets_for_scope(games, preferences, preferences.firewall_scope())
 }
 
 pub fn selected_targets_for_scope(
@@ -432,7 +439,7 @@ pub fn selected_game_ids(games: &[Game], preferences: &Preferences) -> Vec<Strin
 }
 
 pub fn resolve_rules(games: &[Game], preferences: &Preferences) -> Result<Vec<FirewallRule>> {
-    resolve_rules_for_scope(games, preferences, FirewallScope::native())
+    resolve_rules_for_scope(games, preferences, preferences.firewall_scope())
 }
 
 pub fn resolve_rules_for_scope(

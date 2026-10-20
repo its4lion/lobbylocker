@@ -3,9 +3,8 @@
   import { Info, Pencil, RefreshCw } from "@lucide/svelte";
   import AreaCard from "./AreaCard.svelte";
   import TargetForm from "./TargetForm.svelte";
-  import GameProgram from "./GameProgram.svelte";
   import PingMenu from "./PingMenu.svelte";
-  import { windowsBlocking } from "$lib/firewall";
+  import { executableBlocking } from "$lib/firewall";
   import { gameAreas } from "$lib/game";
   import type { Backend } from "$lib/backend.svelte";
   let {
@@ -35,13 +34,9 @@
     >
       <div>
         <h1 dir="auto">{game.name}</h1>
-        <p class="mt-2 text-[13px] text-muted-foreground">
-          {app.t("Choose which servers to block, individually or by region.")}
-        </p>
       </div>
       <PingMenu {app} />
     </div>{/if}
-  {#if windowsBlocking(app.status)}<GameProgram {app} {game} />{/if}
   <div
     class={compact
       ? "mb-3 flex flex-wrap items-center justify-between gap-2"
@@ -66,6 +61,13 @@
               >{app.t("Server data information")}</strong
             >
             {game.note}
+            {#if hiddenRanges && !executableBlocking(app.status)}<span
+                class="mt-2 block"
+              >
+                {app.t(
+                  "Some regions are hosted on shared cloud ranges. Blocking one can affect other applications.",
+                )}
+              </span>{/if}
           </span>
         </button>
       </div>
@@ -96,13 +98,6 @@
         >{/if}
     </div>
   </div>
-  {#if hiddenRanges && !compact}
-    <p class="mb-4 text-xs text-muted-foreground">
-      {app.t(
-        "Some regions are hosted on shared cloud ranges. Blocking one can affect other applications.",
-      )}
-    </p>
-  {/if}
   <div
     id={regionPanel}
     class={compact ? "space-y-5" : "space-y-6"}

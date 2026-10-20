@@ -287,6 +287,97 @@ describe("native bridge", () => {
       "select_game_executable",
     ]);
   });
+  it("uses detected Windows executables on startup and blocks without a second picker", async () => {
+    const loaded = emptyRead();
+    loaded.snapshot.platform = "windows";
+    loaded.snapshot.preferences.libraryGameIds = ["cs2"];
+    loaded.snapshot.games = [
+      {
+        schemaVersion: 1,
+        id: "cs2",
+        name: "Counter-Strike 2",
+        source: null,
+        updatedAt: null,
+        note: "",
+        regions: [
+          {
+            id: "eu",
+            name: "Europe",
+            area: "Europe",
+            probeTarget: null,
+            endpoints: [
+              {
+                id: "server",
+                address: "203.0.113.8",
+                protocol: "udp",
+                ports: null,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const path = "C:\\Games\\Counter-Strike 2\\game\\bin\\win64\\cs2.exe";
+    native.invoke.mockImplementation(
+      async (command: string, args?: Record<string, unknown>) => {
+        if (command === "get_status" || command === "verify_firewall")
+          return structuredClone(loaded);
+        if (command === "get_languages") return { locales: [], warnings: [] };
+        if (command === "get_custom_icons") return {};
+        if (command === "scan_games") {
+          loaded.snapshot.games[0].executablePath = path;
+          return {
+            games: [
+              {
+                id: "cs2",
+                name: "Counter-Strike 2",
+                launcher: "Steam",
+                directory: "C:\\Games\\Counter-Strike 2",
+              },
+            ],
+            warnings: [],
+          };
+        }
+        if (command === "set_preferences") {
+          loaded.snapshot.preferences = structuredClone(
+            args?.preferences as Status["snapshot"]["preferences"],
+          );
+          loaded.dirty = true;
+        }
+        if (command === "apply_rules") {
+          expect(loaded.snapshot.games[0].executablePath).toBe(path);
+          loaded.dirty = false;
+        }
+      },
+    );
+    const app = new Backend();
+    await app.initialize();
+    expect(app.game?.executablePath).toBe(path);
+    expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
+      "get_status",
+      "get_languages",
+      "verify_firewall",
+      "scan_games",
+      "get_status",
+      "get_custom_icons",
+    ]);
+    await app.preferences((preferences) =>
+      preferences.blockedRegions.push("cs2:eu"),
+    );
+    await vi.waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith("apply_rules", undefined),
+    );
+    await vi.waitFor(() => expect(app.busy).toBe(false));
+    expect(app.game?.executablePath).toBe(path);
+    expect(
+      native.invoke.mock.calls.some(([command]) =>
+        ["select_game_executable", "set_game_executable", "save_game"].includes(
+          command,
+        ),
+      ),
+    ).toBe(false);
+  });
   it("keeps the previously selected executable icon when Browse is cancelled", async () => {
     native.invoke.mockResolvedValueOnce(null);
     const app = new Backend();
@@ -943,6 +1034,94 @@ describe("immediate firewall writes", () => {
     ];
     return loaded;
   }
+
+  it("saves Windows scope changes without applying and rejects unknown scopes", async () => {
+    const loaded = blocked();
+    loaded.snapshot.platform = "windows";
+    native.invoke.mockImplementation(
+      async (command: string, args?: Record<string, unknown>) => {
+        if (command === "get_status") return structuredClone(loaded);
+        if (command === "set_preferences")
+          loaded.snapshot.preferences = structuredClone(
+            args?.preferences as Status["snapshot"]["preferences"],
+          );
+        if (command === "apply_rules") loaded.dirty = false;
+      },
+    );
+    const app = new Backend();
+    app.status = structuredClone(loaded);
+    expect(await app.setBlockingScope("unknown")).toBe(false);
+    expect(native.invoke).not.toHaveBeenCalled();
+    expect(await app.setBlockingScope("systemWide")).toBe(true);
+    expect(app.status?.snapshot.preferences.windowsBlockingScope).toBe(
+      "systemWide",
+    );
+    expect(app.status?.snapshot.preferences.blockedRegions).toEqual([
+      "overwatch2:gcp-europe-north1",
+    ]);
+    expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
+      "set_preferences",
+      "get_status",
+    ]);
+    expect(await app.apply()).toBe(true);
+    expect(native.invoke).toHaveBeenCalledWith("apply_rules", undefined);
+    native.invoke.mockClear();
+    app.status!.snapshot.platform = "linux";
+    expect(await app.setBlockingScope("executable")).toBe(false);
+    expect(native.invoke).not.toHaveBeenCalled();
+  });
+
+  it("writes Windows all-apps blocks without choosing any executable", async () => {
+    const loaded = blocked();
+    loaded.snapshot.platform = "windows";
+    loaded.snapshot.preferences.windowsBlockingScope = "systemWide";
+    loaded.snapshot.games = [
+      {
+        schemaVersion: 1,
+        id: "overwatch2",
+        name: "Overwatch 2",
+        source: null,
+        updatedAt: null,
+        note: "",
+        regions: [
+          {
+            id: "gcp-europe-north1",
+            name: "Europe",
+            area: "Europe",
+            probeTarget: null,
+            endpoints: [
+              {
+                id: "server",
+                address: "203.0.113.8",
+                protocol: "udp",
+                ports: null,
+                custom: false,
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return structuredClone(loaded);
+      if (command === "apply_rules") loaded.dirty = false;
+    });
+    const app = new Backend();
+    app.status = structuredClone(loaded);
+    await app.preferences((preferences) =>
+      preferences.blockedRegions.push("cs2:eu"),
+    );
+    await vi.waitFor(() =>
+      expect(native.invoke).toHaveBeenCalledWith("apply_rules", undefined),
+    );
+    await vi.waitFor(() => expect(app.busy).toBe(false));
+    expect(app.status?.snapshot.games[0].executablePath).toBeUndefined();
+    expect(
+      native.invoke.mock.calls.some(([command]) =>
+        ["select_game_executable", "set_game_executable"].includes(command),
+      ),
+    ).toBe(false);
+  });
 
   it("writes as soon as a toggle is saved, with no waiting", async () => {
     const loaded = blocked();

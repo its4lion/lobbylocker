@@ -4,6 +4,7 @@
   import { Checkbox } from "@lobbylocker/ui/components/checkbox";
   import { ScanLine, Search, FolderOpen, File } from "@lucide/svelte";
   import { toggleKeys } from "$lib/game";
+  import { executableBlocking } from "$lib/firewall";
   import GameArtwork from "./GameArtwork.svelte";
   import GameBlockBadge from "./GameBlockBadge.svelte";
   import type { Backend } from "$lib/backend.svelte";
@@ -73,7 +74,11 @@
     <Button variant="outline" disabled={app.busy} onclick={onfolder}
       ><FolderOpen />{app.t("Add library folder")}</Button
     ><Button variant="outline" disabled={app.busy} onclick={onexecutable}
-      ><File />{app.t("Choose executable")}</Button
+      ><File />{app.t(
+        executableBlocking(app.status)
+          ? "Choose executable"
+          : "Add custom game",
+      )}</Button
     >
   </div>
   <div class="grid gap-3 lg:grid-cols-2">

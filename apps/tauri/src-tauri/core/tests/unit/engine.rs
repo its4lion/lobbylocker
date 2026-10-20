@@ -425,6 +425,203 @@ fn last_applied_game_hints_survive_restart_and_do_not_claim_verified_firewall_st
 }
 
 #[test]
+#[cfg(target_os = "windows")]
+fn windows_scope_changes_stay_pending_until_matching_rules_are_read_back() {
+    let root = tempfile::tempdir().unwrap();
+    let engine = Engine::new(
+        Store::open(root.path().join("config"), &root.path().join("no-defaults")).unwrap(),
+    )
+    .unwrap();
+    let game = crate::installed::custom_game(
+        "example".into(),
+        "Example",
+        "Custom",
+        "203.0.113.7",
+        crate::model::Protocol::Udp,
+        None,
+    )
+    .unwrap();
+    engine.save_game(&game).unwrap();
+    let mut preferences = engine.runtime().snapshot.preferences;
+    preferences.blocked_regions = vec!["example:custom".into()];
+    preferences.windows_blocking_scope = crate::model::FirewallScope::SystemWide;
+    engine.preferences(preferences).unwrap();
+    engine.record_inspection(Inspection::default()).unwrap();
+    assert!(engine.runtime().dirty);
+    assert_eq!(engine.runtime().applied_count, Some(0));
+    let rules = resolve_rules(
+        &engine.runtime().snapshot.games,
+        &engine.runtime().snapshot.preferences,
+    )
+    .unwrap();
+    assert!(rules.iter().all(|rule| rule.program.is_none()));
+    let report = inspection::windows_snapshot(&serde_json::json!({
+        "enforced": true, "supported": true,
+        "rules": [{ "address": "203.0.113.7", "protocol": 17, "ports": "Any", "program": null, "sourceId": "example-custom-server" }]
+    })).unwrap();
+    engine.record_inspection(report).unwrap();
+    let verified = engine.runtime();
+    assert_eq!(verified.verification, Verification::Matched);
+    assert!(!verified.dirty);
+    assert_eq!(
+        verified.region_states["example:custom"],
+        RegionState::Blocked
+    );
+
+    let mut preferences = verified.snapshot.preferences;
+    preferences.windows_blocking_scope = crate::model::FirewallScope::Executable;
+    engine.preferences(preferences).unwrap();
+    let pending = engine.runtime();
+    assert!(pending.dirty);
+    assert!(resolve_rules(&pending.snapshot.games, &pending.snapshot.preferences).is_err());
+    assert_eq!(pending.applied_targets, verified.applied_targets);
+    assert_eq!(pending.applied_count, Some(1));
+
+    let mut preferences = pending.snapshot.preferences;
+    preferences.windows_blocking_scope = crate::model::FirewallScope::SystemWide;
+    engine.preferences(preferences).unwrap();
+    assert!(!engine.runtime().dirty);
+    assert_eq!(engine.runtime().applied_targets, verified.applied_targets);
+}
+
+#[test]
+fn executable_detection_is_read_only_and_survives_library_and_game_edits() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let config = root.path().join("config");
+    let engine = Engine::new(Store::open(config.clone(), &defaults).unwrap()).unwrap();
+    let directory = root.path().join("Counter-Strike 2");
+    let executable = directory.join("game/bin/win64/cs2.exe");
+    std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+    std::fs::write(&executable, b"never executed").unwrap();
+    let detected = vec![crate::installed::InstalledGame {
+        id: "cs2".into(),
+        name: "Counter-Strike 2".into(),
+        launcher: "Steam".into(),
+        directory,
+    }];
+    let mut preferences = engine.runtime().snapshot.preferences;
+    preferences.blocked_regions = vec!["cs2:dxb".into()];
+    engine.preferences(preferences).unwrap();
+    engine.record_inspection(Inspection::default()).unwrap();
+    let original = std::fs::read(config.join("games/cs2.json")).unwrap();
+    let saved_preferences = std::fs::read(config.join("preferences.json")).unwrap();
+    let before = engine.runtime();
+    engine.detect_game_executables(&detected).unwrap();
+    let after = engine.runtime();
+    let game = after
+        .snapshot
+        .games
+        .iter()
+        .find(|game| game.id == "cs2")
+        .unwrap();
+    assert_eq!(
+        game.executable_path,
+        crate::installed::game_executable(&detected[0])
+    );
+    assert_eq!(game.regions, before.snapshot.games[0].regions);
+    assert_eq!(after.snapshot.preferences, before.snapshot.preferences);
+    assert_eq!(after.applied_targets, before.applied_targets);
+    assert_eq!(after.applied_count, before.applied_count);
+    assert_eq!(after.applied_game_ids, before.applied_game_ids);
+    assert!(after.samples.is_empty());
+    assert_eq!(
+        std::fs::read(config.join("games/cs2.json")).unwrap(),
+        original
+    );
+    assert_eq!(
+        std::fs::read(config.join("preferences.json")).unwrap(),
+        saved_preferences
+    );
+
+    engine
+        .set_library_games(vec!["cs2".into()], &detected)
+        .unwrap();
+    let mut other = engine
+        .runtime()
+        .snapshot
+        .games
+        .into_iter()
+        .find(|game| game.id == "deadlock")
+        .unwrap();
+    other.note = "An unrelated edit".into();
+    engine.save_game(&other).unwrap();
+    assert_eq!(
+        engine.runtime().snapshot.games[0].executable_path,
+        game.executable_path
+    );
+    assert_eq!(
+        std::fs::read(config.join("games/cs2.json")).unwrap(),
+        original
+    );
+    let generation = engine.runtime().generation;
+    engine.detect_game_executables(&detected).unwrap();
+    assert_eq!(engine.runtime().generation, generation);
+
+    // Removed/excluded installations cannot leave stale automatic fallbacks.
+    engine.detect_game_executables(&[]).unwrap();
+    assert!(engine.runtime().snapshot.games[0].executable_path.is_none());
+    assert_eq!(engine.runtime().applied_targets, before.applied_targets);
+    assert_eq!(
+        std::fs::read(config.join("games/cs2.json")).unwrap(),
+        original
+    );
+}
+
+#[test]
+fn executable_detection_never_replaces_an_explicitly_saved_path() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let engine = Engine::new(Store::open(root.path().join("config"), &defaults).unwrap()).unwrap();
+    let directory = root.path().join("Overwatch");
+    std::fs::create_dir_all(directory.join("_retail_")).unwrap();
+    std::fs::write(directory.join("_retail_/Overwatch.exe"), b"never executed").unwrap();
+    let detected = vec![crate::installed::InstalledGame {
+        id: "overwatch2".into(),
+        name: "Overwatch 2".into(),
+        launcher: "Battle.net".into(),
+        directory,
+    }];
+    let mut game = engine
+        .runtime()
+        .snapshot
+        .games
+        .into_iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    game.executable_path = Some(r"D:\Custom install\Overwatch.exe".into());
+    engine.save_game(&game).unwrap();
+    let original = std::fs::read(root.path().join("config/games/overwatch2.json")).unwrap();
+    engine.detect_game_executables(&detected).unwrap();
+    assert_eq!(
+        engine
+            .runtime()
+            .snapshot
+            .games
+            .into_iter()
+            .find(|game| game.id == "overwatch2")
+            .unwrap(),
+        game
+    );
+    assert_eq!(
+        std::fs::read(root.path().join("config/games/overwatch2.json")).unwrap(),
+        original
+    );
+    engine.detect_game_executables(&[]).unwrap();
+    assert_eq!(
+        engine
+            .runtime()
+            .snapshot
+            .games
+            .into_iter()
+            .find(|game| game.id == "overwatch2")
+            .unwrap()
+            .executable_path,
+        game.executable_path
+    );
+}
+
+#[test]
 fn curating_games_persists_without_replacing_files_or_changing_firewall_state() {
     let root = tempfile::tempdir().unwrap();
     let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");

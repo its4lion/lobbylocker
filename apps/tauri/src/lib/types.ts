@@ -1,5 +1,6 @@
 export type Protocol = "udp" | "tcp" | "any";
 export type RegionState = "blocked" | "partial" | "none" | "unknown";
+export type BlockingScope = "executable" | "systemWide";
 /** Why the OS could not confirm which rules are active. */
 export type VerificationIssue =
   "managedByDeviceManagement" | "firewallUnavailable" | "unsupportedFilters";
@@ -36,6 +37,7 @@ export interface Preferences {
   excludedGameLibraryPaths: string[];
   libraryGameIds: string[];
   lastAppliedGameIds: string[];
+  windowsBlockingScope?: BlockingScope;
   language: string;
 }
 export interface PingSample {

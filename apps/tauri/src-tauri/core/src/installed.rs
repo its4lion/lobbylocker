@@ -18,6 +18,31 @@ pub struct InstalledGame {
     pub directory: PathBuf,
 }
 
+/// Only known game binaries, never the first .exe in a folder or a launcher.
+/// Canonical containment also prevents installation symlinks escaping the game.
+pub(crate) fn game_executable(game: &InstalledGame) -> Option<String> {
+    let candidates: &[&str] = match game.id.as_str() {
+        "cs2" => &["game/bin/win64/cs2.exe"],
+        "deadlock" => &["game/bin/win64/deadlock.exe"],
+        "overwatch2" => &["_retail_/Overwatch.exe", "Overwatch.exe"],
+        _ => return None,
+    };
+    let directory = fs::canonicalize(&game.directory).ok()?;
+    candidates.iter().find_map(|relative| {
+        let path = fs::canonicalize(directory.join(relative)).ok()?;
+        if !path.is_file() || !path.starts_with(&directory) {
+            return None;
+        }
+        let path = path.to_str()?;
+        // canonicalize uses extended-length paths on Windows, but firewall
+        // scopes deliberately require an ordinary, validated local-drive path.
+        let path = path.strip_prefix(r"\\?\").unwrap_or(path).to_owned();
+        #[cfg(target_os = "windows")]
+        let path = crate::model::windows_program(&path).ok()?;
+        Some(path)
+    })
+}
+
 #[derive(Clone, Default, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Scan {

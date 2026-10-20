@@ -88,6 +88,62 @@ fn windows_resolution_never_falls_back_and_deduplicates_within_each_program() {
 }
 
 #[test]
+fn windows_scope_is_explicit_persisted_and_defaults_to_selected_games() {
+    let legacy = br#"{"schemaVersion":1,"blockedRegions":[]}"#;
+    let mut preferences = Preferences::from_json(legacy).unwrap();
+    assert_eq!(
+        preferences.windows_blocking_scope,
+        FirewallScope::Executable
+    );
+    assert_eq!(
+        preferences.firewall_scope(),
+        if cfg!(target_os = "windows") {
+            FirewallScope::Executable
+        } else {
+            FirewallScope::SystemWide
+        }
+    );
+    preferences.windows_blocking_scope = FirewallScope::SystemWide;
+    let mut json = serde_json::to_value(&preferences).unwrap();
+    assert_eq!(json["windowsBlockingScope"], "systemWide");
+    assert_eq!(
+        Preferences::from_json(&serde_json::to_vec(&json).unwrap()).unwrap(),
+        preferences
+    );
+    assert_eq!(preferences.firewall_scope(), FirewallScope::SystemWide);
+    json["windowsBlockingScope"] = serde_json::json!("unknown");
+    assert!(Preferences::from_json(&serde_json::to_vec(&json).unwrap()).is_err());
+}
+
+#[test]
+fn all_apps_rules_need_no_executable_but_selected_games_never_silently_fall_back() {
+    let game = crate::installed::custom_game(
+        "example".into(),
+        "Example",
+        "Custom",
+        "203.0.113.7",
+        Protocol::Udp,
+        None,
+    )
+    .unwrap();
+    let preferences = Preferences {
+        blocked_regions: vec!["example:custom".into()],
+        windows_blocking_scope: FirewallScope::SystemWide,
+        ..Default::default()
+    };
+    let rules = resolve_rules_for_scope(
+        std::slice::from_ref(&game),
+        &preferences,
+        FirewallScope::SystemWide,
+    )
+    .unwrap();
+    assert_eq!(rules.len(), 1);
+    assert!(rules[0].program.is_none());
+    assert!(validate_program_files(&rules).is_ok());
+    assert!(resolve_rules_for_scope(&[game], &preferences, FirewallScope::Executable).is_err());
+}
+
+#[test]
 fn program_availability_is_checked_without_executing_it() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("game.exe");

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterTargets,
+  executableBlocking,
   savedTargets,
   missingPrograms,
   scopeWarning,
@@ -52,6 +53,32 @@ function status(): Status {
 }
 
 describe("firewall review", () => {
+  it("allows explicit all-apps Windows blocking without a game executable", () => {
+    const app = status();
+    app.snapshot.platform = "windows";
+    expect(executableBlocking(app)).toBe(true);
+    expect(missingPrograms(app)).toHaveLength(2);
+    app.snapshot.games[0].executablePath = "C:\\Games\\One\\game.exe";
+    app.appliedTargets = structuredClone(savedTargets(app));
+    app.snapshot.preferences.windowsBlockingScope = "systemWide";
+    expect(executableBlocking(app)).toBe(false);
+    expect(missingPrograms(app)).toEqual([]);
+    expect(
+      savedTargets(app).every((target) => target.executablePath === null),
+    ).toBe(true);
+    expect(scopeWarning(app)).toContain("system-wide");
+    // Changing scope previews new rules; it cannot rewrite OS readback or paths.
+    expect(app.appliedTargets[0].executablePath).toBe(
+      "C:\\Games\\One\\game.exe",
+    );
+    app.snapshot.preferences.windowsBlockingScope = "executable";
+    expect(missingPrograms(app).map((target) => target.gameId)).toEqual([
+      "two",
+    ]);
+    app.snapshot.platform = "linux";
+    expect(executableBlocking(app)).toBe(false);
+    expect(executableBlocking(null)).toBe(false);
+  });
   it("requires an executable only for selected nonempty Windows games, without a system-wide fallback", () => {
     const app = status();
     app.snapshot.platform = "windows";

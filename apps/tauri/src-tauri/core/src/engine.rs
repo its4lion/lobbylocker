@@ -7,8 +7,8 @@ use crate::{
     },
     latency::{self, PingSample},
     model::{
-        resolve_rules, selected_game_ids, selected_targets, FirewallRule, FirewallScope,
-        FirewallTarget, Game, Preferences, Snapshot,
+        resolve_rules, selected_game_ids, selected_targets, FirewallRule, FirewallTarget, Game,
+        Preferences, Snapshot,
     },
     store::Store,
     Result,
@@ -49,6 +49,9 @@ pub struct Runtime {
     /// Comparison baseline only, never active-state evidence. Before the first
     /// successful read this is the loaded selection; afterwards it is native keys.
     pending_baseline: PendingKeys,
+    /// Runtime-only fallbacks. Discovery never rewrites existing game files,
+    /// and an explicitly saved executable always wins over detection.
+    detected_executables: BTreeMap<String, String>,
     pub dirty: bool,
     pub message: String,
     pub generation: u64,
@@ -80,6 +83,7 @@ impl Engine {
                 applied_count: None,
                 applied_game_ids: vec![],
                 pending_baseline,
+                detected_executables: BTreeMap::new(),
                 dirty: false,
                 message: "Loading firewall status. No rules are changed automatically.".into(),
                 generation: 0,
@@ -90,6 +94,40 @@ impl Engine {
 
     pub fn runtime(&self) -> Runtime {
         self.state.lock().unwrap().clone()
+    }
+
+    fn replace_snapshot(state: &mut Runtime, mut snapshot: Snapshot) {
+        for game in &mut snapshot.games {
+            if game.executable_path.is_none() {
+                game.executable_path = state.detected_executables.get(&game.id).cloned();
+            }
+        }
+        state.snapshot = snapshot;
+    }
+
+    /// Resolve supported installations without a second file picker. This is
+    /// read-only discovery: no configuration or firewall rules are written.
+    pub fn detect_game_executables(
+        &self,
+        detected: &[crate::installed::InstalledGame],
+    ) -> Result<()> {
+        let _operation = self.operation.lock().map_err(|e| e.to_string())?;
+        let paths = detected
+            .iter()
+            .filter_map(|game| {
+                crate::installed::game_executable(game).map(|path| (game.id.clone(), path))
+            })
+            .collect();
+        let snapshot = self.store.snapshot()?;
+        let mut state = self.state.lock().map_err(|e| e.to_string())?;
+        let previous = state.snapshot.games.clone();
+        state.detected_executables = paths;
+        Self::replace_snapshot(&mut state, snapshot);
+        if state.snapshot.games != previous {
+            state.generation += 1;
+            Self::reconcile(&mut state);
+        }
+        Ok(())
     }
 
     /// Never writes preferences, recovery hints, or firewall rules. The UI reads
@@ -120,7 +158,7 @@ impl Engine {
         let targets = inspection::observed_targets(
             &state.snapshot.games,
             &report,
-            FirewallScope::native(),
+            state.snapshot.preferences.firewall_scope(),
             &relevant,
         );
         state.applied_game_ids = targets
@@ -169,8 +207,11 @@ impl Engine {
         } else {
             Verification::Matched
         };
-        state.region_states =
-            inspection::region_states(&state.snapshot.games, report, FirewallScope::native());
+        state.region_states = inspection::region_states(
+            &state.snapshot.games,
+            report,
+            state.snapshot.preferences.firewall_scope(),
+        );
     }
 
     /// Ignore names, probe settings, ordering, duplicates, and library curation.
@@ -267,7 +308,7 @@ impl Engine {
         self.store.save_game(game)?;
         let snapshot = self.store.snapshot()?;
         let mut state = self.state.lock().map_err(|e| e.to_string())?;
-        state.snapshot = snapshot;
+        Self::replace_snapshot(&mut state, snapshot);
         state.generation += 1;
         Self::reconcile(&mut state);
         state.message = format!(
@@ -332,7 +373,8 @@ impl Engine {
         }
         self.store.save_preferences(&preferences)?;
         let snapshot = self.store.snapshot()?;
-        self.state.lock().map_err(|e| e.to_string())?.snapshot = snapshot;
+        let mut state = self.state.lock().map_err(|e| e.to_string())?;
+        Self::replace_snapshot(&mut state, snapshot);
         Ok(())
     }
 
@@ -378,7 +420,7 @@ impl Engine {
         if updated != original {
             self.store.save_game(&updated)?;
             let mut state = self.state.lock().map_err(|e| e.to_string())?;
-            state.snapshot = self.store.snapshot()?;
+            Self::replace_snapshot(&mut state, self.store.snapshot()?);
             state.generation += 1;
             Self::reconcile(&mut state);
         }
@@ -404,7 +446,7 @@ impl Engine {
         let updated = catalogue::refresh(&game)?;
         self.store.save_game(&updated)?;
         let mut state = self.state.lock().map_err(|e| e.to_string())?;
-        state.snapshot = self.store.snapshot()?;
+        Self::replace_snapshot(&mut state, self.store.snapshot()?);
         state.generation += 1;
         Self::reconcile(&mut state);
         state.message = "Server file refreshed. Review the new targets before applying.".into();

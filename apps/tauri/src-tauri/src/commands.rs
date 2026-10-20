@@ -270,6 +270,9 @@ pub async fn scan_games(state: tauri::State<'_, Backend>) -> Result<Scan> {
 
 fn cached_scan(engine: &Engine, cache: &Mutex<Scan>) -> Result<Scan> {
     let scan = scan_libraries(engine);
+    if cfg!(target_os = "windows") {
+        engine.detect_game_executables(&scan.games)?;
+    }
     *cache.lock().map_err(|e| e.to_string())? = scan.clone();
     Ok(scan)
 }

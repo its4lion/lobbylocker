@@ -293,6 +293,10 @@ fn wire_status_has_no_private_policy_and_uses_camel_case() {
     assert!(value["snapshot"]["preferences"]["libraryGameIds"].is_array());
     assert!(value["snapshot"]["preferences"]["lastAppliedGameIds"].is_array());
     assert!(value["snapshot"]["preferences"]["language"].is_string());
+    assert_eq!(
+        value["snapshot"]["preferences"]["windowsBlockingScope"],
+        "executable"
+    );
     assert!(value["snapshot"]["preferences"].get("profiles").is_none());
     assert!(value["snapshot"]["preferences"]
         .get("enabledRules")

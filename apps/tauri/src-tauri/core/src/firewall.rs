@@ -96,7 +96,7 @@ pub fn nft_script(request: &Request, exists: bool) -> Result<String> {
 pub(crate) struct WindowsRuleSpec {
     pub name: String,
     pub source_id: String,
-    pub program: String,
+    pub program: Option<String>,
     pub address: String,
     pub protocol: i32,
     pub ports: Option<String>,
@@ -116,9 +116,7 @@ pub(crate) fn windows_rule_plan(request: &Request) -> Result<Vec<WindowsRuleSpec
         if !identifiers.insert(rule.endpoint.id.to_ascii_lowercase()) {
             return Err("Windows firewall rule IDs must be unique ignoring case.".into());
         }
-        let program = windows_program(rule.program.as_deref().ok_or(
-            "Windows firewall rules require a game executable. System-wide fallback is not allowed.",
-        )?)?;
+        let program = rule.program.as_deref().map(windows_program).transpose()?;
         let endpoint = &rule.endpoint;
         let address = normalize_address(&endpoint.address)?;
         let ports = parse_ports(&endpoint.ports)?.map(|(start, end)| format!("{start}-{end}"));

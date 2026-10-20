@@ -210,7 +210,7 @@ fn any_protocol_with_ports_expands_to_tcp_and_udp() {
     for rule in &plan {
         assert_eq!(rule.address, "203.0.113.0/24");
         assert_eq!(rule.ports.as_deref(), Some("27015-27060"));
-        assert_eq!(rule.program, r"C:\Games\Example\game.exe");
+        assert_eq!(rule.program.as_deref(), Some(r"C:\Games\Example\game.exe"));
         assert_eq!(rule.source_id, "test-rule");
     }
     assert_ne!(plan[0].name, plan[1].name);
@@ -243,19 +243,28 @@ fn windows_rule_ids_cannot_collide_by_case_before_requesting_elevation() {
 }
 
 #[test]
-fn windows_requires_program_scope_and_linux_refuses_to_widen_it() {
+fn windows_supports_explicit_all_apps_and_linux_refuses_to_widen_program_rules() {
     let mut scoped = rule(Protocol::Udp, None);
-    assert!(windows_rule_plan(&Request::Apply {
-        rules: vec![scoped.clone()]
-    })
-    .is_err());
+    let global = Request::Apply {
+        rules: vec![scoped.clone()],
+    };
+    let plan = windows_rule_plan(&global).unwrap();
+    assert_eq!(plan.len(), 1);
+    assert!(plan[0].program.is_none());
+    assert_eq!(plan[0].address, "203.0.113.0/24");
+    let preview: serde_json::Value =
+        serde_json::from_str(&windows_preview(&global).unwrap()).unwrap();
+    assert!(preview["rules"][0]["program"].is_null());
     scoped.program = Some(r"D:\Games\Example\game.exe".into());
     let request = Request::Apply {
         rules: vec![scoped],
     };
     let plan = windows_rule_plan(&request).unwrap();
     assert_eq!(plan.len(), 1);
-    assert_eq!(plan[0].program, r"D:\Games\Example\game.exe");
+    assert_eq!(
+        plan[0].program.as_deref(),
+        Some(r"D:\Games\Example\game.exe")
+    );
     assert_eq!(plan[0].protocol, 17);
     assert!(nft_script(&request, true).is_err());
     assert!(windows_rule_plan(&Request::Apply { rules: vec![] })
@@ -272,7 +281,7 @@ fn windows_program_paths_remain_literal_data_in_native_plan_and_preview() {
         rules: vec![scoped],
     };
     let plan = windows_rule_plan(&request).unwrap();
-    assert_eq!(plan[0].program, path);
+    assert_eq!(plan[0].program.as_deref(), Some(path));
     assert_eq!(plan[0].ports.as_deref(), Some("443-443"));
     let preview: serde_json::Value =
         serde_json::from_str(&windows_preview(&request).unwrap()).unwrap();

@@ -3,7 +3,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { selectedLocale, translate } from "./i18n";
 import { libraryGames, libraryCandidates, blockGameIds } from "./game";
-import { missingPrograms } from "./firewall";
+import { missingPrograms, windowsBlocking } from "./firewall";
 import { pingRequest } from "./ping";
 import { Requests } from "./requests";
 import type {
@@ -124,6 +124,9 @@ export class Backend {
       if (!this.startupScanAttempted) {
         this.startupScanAttempted = true;
         await this.detectGames();
+        // The native scan resolves supported Windows games' executables. Read
+        // those effective paths before checking whether blocking is ready.
+        if (windowsBlocking(this.status)) await this.reload();
       }
       // Selections saved but not yet written are applied now rather than
       // waiting for the next toggle.
@@ -378,6 +381,19 @@ export class Backend {
         void this.writeBlocks(previous);
       }
       return saved;
+    });
+  }
+
+  setBlockingScope(scope: string) {
+    if (
+      !windowsBlocking(this.status) ||
+      (scope !== "executable" && scope !== "systemWide")
+    )
+      return Promise.resolve(false);
+    // Scope changes stay pending until explicitly applied in Settings. In
+    // particular, opening Settings must never widen existing firewall rules.
+    return this.preferences((preferences) => {
+      preferences.windowsBlockingScope = scope;
     });
   }
 

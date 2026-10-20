@@ -208,7 +208,9 @@ fn create_rule(spec: &WindowsRuleSpec) -> InspectionResult<INetFwRule> {
             rule.SetName(&BSTR::from(&spec.name))?;
             rule.SetDescription(&BSTR::from(format!("LobbyLocker: {}", spec.source_id)))?;
             rule.SetGrouping(&BSTR::from(WINDOWS_GROUP))?;
-            rule.SetApplicationName(&BSTR::from(&spec.program))?;
+            if let Some(program) = &spec.program {
+                rule.SetApplicationName(&BSTR::from(program))?;
+            }
             rule.SetProtocol(spec.protocol)?;
             rule.SetRemoteAddresses(&BSTR::from(&spec.address))?;
             if let Some(ports) = &spec.ports {
@@ -637,7 +639,7 @@ mod tests {
         let spec = WindowsRuleSpec {
             name: "LobbyLocker.0123456789abcdef0123456789abcdef.game-eu.TCP".into(),
             source_id: "game-eu".into(),
-            program: r"C:\Games\Example\game.exe".into(),
+            program: Some(r"C:\Games\Example\game.exe".into()),
             address: "192.0.2.1".into(),
             protocol: 6,
             ports: Some("443-443".into()),
@@ -651,9 +653,30 @@ mod tests {
         };
         let row = rule_row(&owned).unwrap().unwrap();
         assert_eq!(row["sourceId"], "game-eu");
-        assert_eq!(row["program"], spec.program);
+        assert_eq!(row["program"].as_str(), spec.program.as_deref());
         let rule3: INetFwRule3 = owned.rule.cast().unwrap();
         unsafe { rule3.SetLocalUserOwner(&BSTR::from("S-1-5-21-1-2-3-1001")) }.unwrap();
         assert!(rule_row(&owned).is_err());
+    }
+
+    #[test]
+    fn all_apps_rules_have_no_application_filter() {
+        let _apartment = Apartment::enter().unwrap();
+        let spec = WindowsRuleSpec {
+            name: "LobbyLocker.0123456789abcdef0123456789abcdef.game-eu.UDP".into(),
+            source_id: "game-eu".into(),
+            program: None,
+            address: "192.0.2.1".into(),
+            protocol: 17,
+            ports: None,
+        };
+        // In-memory COM object only, never added to the live policy store.
+        let owned = OwnedRule {
+            name: spec.name.clone(),
+            rule: create_rule(&spec).unwrap(),
+        };
+        let row = rule_row(&owned).unwrap().unwrap();
+        assert!(row["program"].is_null());
+        assert_eq!(row["sourceId"], "game-eu");
     }
 }

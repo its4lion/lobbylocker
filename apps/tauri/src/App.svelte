@@ -5,6 +5,7 @@
   import { actionBar, applyReview } from "$lib/action-bar";
   import {
     scopeWarning,
+    executableBlocking,
     missingPrograms,
     verificationIssueMessage,
     verificationIssueRetryable,
@@ -102,8 +103,9 @@
     if (await app.addLibrary()) manage();
   }
   async function addExecutable() {
-    const path = await app.pickExecutable();
-    if (path) {
+    const needsExecutable = executableBlocking(app.status);
+    const path = needsExecutable ? await app.pickExecutable() : "";
+    if (path !== null) {
       if (compact && !(await changeLayout("expanded"))) return;
       manageOpen = false;
       customPath = path;
@@ -119,6 +121,13 @@
   async function reset() {
     confirmOpen = false;
     if (!(await app.command("reset_rules"))) content?.scrollTo({ top: 0 });
+  }
+  async function showSettings() {
+    if (compact && !(await changeLayout("expanded"))) return;
+    view = "main";
+    page = "Settings";
+    await tick();
+    content?.scrollTo({ top: 0 });
   }
   async function changeLayout(next: AppLayout, restoreFocus = false) {
     if (changingLayout) return false;
@@ -329,19 +338,33 @@
                   regions: review.regions,
                 })}
               </p>
-              {#if bar.apply || app.firewallAction === "apply"}<p
-                  class="mt-1 max-w-2xl text-xs text-muted-foreground"
+              {#if bar.apply || app.firewallAction === "apply"}<span
+                  class="text-[11px] text-muted-foreground"
+                  title={app.t(scopeWarning(app.status))}
+                  >{app.t(
+                    executableBlocking(app.status)
+                      ? "Selected games"
+                      : "All apps on this PC",
+                  )}</span
+                >{/if}
+              {#if bar.apply && missing.length}<div
+                  class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
                 >
-                  {app.t(scopeWarning(app.status))}
-                </p>{/if}
-              {#if bar.apply && missing.length}<p
-                  class="mt-1 text-xs text-destructive"
-                >
-                  {app.t("Choose executables for these games before blocking")}:
-                  <span dir="auto"
-                    >{missing.map((target) => target.gameName).join(", ")}</span
+                  <p class="text-destructive">
+                    {app.t("Game executable needed for")}:
+                    <span dir="auto"
+                      >{missing
+                        .map((target) => target.gameName)
+                        .join(", ")}</span
+                    >
+                  </p>
+                  <Button
+                    variant="link"
+                    class="h-auto p-0 text-xs"
+                    disabled={app.busy || changingLayout}
+                    onclick={showSettings}>{app.t("Open Settings")}</Button
                   >
-                </p>{/if}
+                </div>{/if}
             </div>{/if}
           {#if compact}
             <div class="flex items-center justify-between gap-2">

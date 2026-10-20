@@ -7,7 +7,7 @@
   import { Plus, FolderOpen } from "@lucide/svelte";
   import { areas } from "$lib/game";
   import { localIcon } from "$lib/artwork";
-  import { scopeWarning } from "$lib/firewall";
+  import { executableBlocking } from "$lib/firewall";
   import type { Backend } from "$lib/backend.svelte";
   import type { Protocol } from "$lib/types";
   let {
@@ -25,6 +25,7 @@
   let ports = $state("");
   let advanced = $state(false);
   let initialized = false;
+  const needsExecutable = $derived(executableBlocking(app.status));
   function basename(path: string) {
     return (
       path
@@ -49,7 +50,8 @@
   }
   async function save(event: SubmitEvent) {
     event.preventDefault();
-    if (!name.trim() || !address.trim() || !executablePath) return;
+    if (!name.trim() || !address.trim() || (needsExecutable && !executablePath))
+      return;
     if (
       await app.create({
         candidateId: null,
@@ -58,7 +60,7 @@
         area,
         protocol,
         ports: ports.trim() || null,
-        executablePath,
+        executablePath: executablePath || null,
       })
     )
       ondone();
@@ -68,35 +70,30 @@
 <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
   <div>
     <h1>{app.t("Add custom game")}</h1>
-    <p class="mt-2 text-[13px] text-muted-foreground">
-      {app.t(
-        "Add the server IPs for this game. Saving does not apply firewall rules.",
-      )}
-    </p>
   </div>
 </div>
 <form onsubmit={save} class="max-w-2xl space-y-5">
   <fieldset disabled={app.busy} class="space-y-5">
-    {#if localIcon(app.pickedIcon)}<img
+    {#if executablePath && localIcon(app.pickedIcon)}<img
         src={localIcon(app.pickedIcon)}
         alt=""
         class="size-14 rounded-lg object-contain"
       />{/if}
-    <div class="grid gap-2">
-      <Label for="game-executable">{app.t("Game executable")}</Label>
-      <div class="flex gap-2">
-        <Input
-          id="game-executable"
-          value={executablePath}
-          readonly
-          required
-          dir="ltr"
-          class="min-w-0 flex-1"
-        /><Button variant="outline" type="button" onclick={browse}
-          ><FolderOpen />{app.t("Browse")}</Button
-        >
-      </div>
-    </div>
+    {#if needsExecutable || executablePath}<div class="grid gap-2">
+        <Label for="game-executable">{app.t("Game executable")}</Label>
+        <div class="flex gap-2">
+          <Input
+            id="game-executable"
+            value={executablePath}
+            readonly
+            required
+            dir="ltr"
+            class="min-w-0 flex-1"
+          /><Button variant="outline" type="button" onclick={browse}
+            ><FolderOpen />{app.t("Browse")}</Button
+          >
+        </div>
+      </div>{/if}
     <div class="grid gap-2">
       <Label for="game-name">{app.t("Game name")}</Label><Input
         id="game-name"
@@ -149,10 +146,6 @@
       </Collapsible.Content></Collapsible.Root
     >
   </fieldset>
-  <p class="text-xs leading-relaxed text-muted-foreground">
-    {app.t("The executable is never launched by LobbyLocker.")}
-    {app.t(scopeWarning(app.status))}
-  </p>
   <div class="flex justify-end gap-3">
     <Button
       type="button"
@@ -161,7 +154,10 @@
       onclick={oncancel}>{app.t("Cancel")}</Button
     ><Button
       type="submit"
-      disabled={app.busy || !name.trim() || !address.trim() || !executablePath}
+      disabled={app.busy ||
+        !name.trim() ||
+        !address.trim() ||
+        (needsExecutable && !executablePath)}
       ><Plus />{app.t("Add game")}</Button
     >
   </div>

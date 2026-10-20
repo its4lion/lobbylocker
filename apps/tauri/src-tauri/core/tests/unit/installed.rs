@@ -2,6 +2,75 @@
 use super::*;
 
 #[test]
+fn supported_games_resolve_only_their_actual_installed_executables() {
+    let root = tempfile::tempdir().unwrap();
+    for (id, relative) in [
+        ("cs2", "game/bin/win64/cs2.exe"),
+        ("deadlock", "game/bin/win64/deadlock.exe"),
+        ("overwatch2", "_retail_/Overwatch.exe"),
+        ("overwatch2", "Overwatch.exe"),
+    ] {
+        let directory = tempfile::tempdir_in(root.path()).unwrap();
+        let game = InstalledGame {
+            id: id.into(),
+            name: id.into(),
+            launcher: "Steam".into(),
+            directory: directory.path().into(),
+        };
+        fs::write(directory.path().join("Launcher.exe"), b"never run").unwrap();
+        assert!(game_executable(&game).is_none());
+        let executable = directory.path().join(relative);
+        fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        fs::write(&executable, b"never run").unwrap();
+        let detected = game_executable(&game).unwrap();
+        assert_eq!(
+            fs::canonicalize(&detected).unwrap(),
+            fs::canonicalize(executable).unwrap()
+        );
+        #[cfg(target_os = "windows")]
+        assert!(crate::model::windows_program(&detected).is_ok());
+        assert!(game_executable(&InstalledGame {
+            id: "steam-unknown".into(),
+            ..game
+        })
+        .is_none());
+    }
+}
+
+#[test]
+fn missing_or_incomplete_installs_do_not_guess_an_executable() {
+    let root = tempfile::tempdir().unwrap();
+    let game = InstalledGame {
+        id: "cs2".into(),
+        name: "Counter-Strike 2".into(),
+        launcher: "Steam".into(),
+        directory: root.path().into(),
+    };
+    fs::write(root.path().join("cs2.exe"), b"not the known game binary").unwrap();
+    assert!(game_executable(&game).is_none());
+    fs::create_dir_all(root.path().join("game/bin/win64/cs2.exe")).unwrap();
+    assert!(game_executable(&game).is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn detected_executables_cannot_escape_the_installation_through_a_symlink() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("Overwatch");
+    fs::create_dir_all(&directory).unwrap();
+    let outside = root.path().join("outside.exe");
+    fs::write(&outside, b"never run").unwrap();
+    std::os::unix::fs::symlink(&outside, directory.join("Overwatch.exe")).unwrap();
+    let game = InstalledGame {
+        id: "overwatch2".into(),
+        name: "Overwatch 2".into(),
+        launcher: "Steam".into(),
+        directory,
+    };
+    assert!(game_executable(&game).is_none());
+}
+
+#[test]
 fn lists_default_registered_and_added_folders_once_and_keeps_removals_effective() {
     let root = tempfile::tempdir().unwrap();
     let steam = root.path().join("Steam");

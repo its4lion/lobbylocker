@@ -4,6 +4,13 @@ export function windowsBlocking(status: Status | null): boolean {
   return status?.snapshot.platform === "windows";
 }
 
+export function executableBlocking(status: Status | null): boolean {
+  return (
+    windowsBlocking(status) &&
+    status?.snapshot.preferences.windowsBlockingScope !== "systemWide"
+  );
+}
+
 /**
  * A user-facing explanation for a failed readback. Each cause needs a
  * different response, so an opaque "could not verify" is not enough.
@@ -32,13 +39,13 @@ export function verificationIssueRetryable(
 }
 
 export function scopeWarning(status: Status | null): string {
-  return windowsBlocking(status)
+  return executableBlocking(status)
     ? "Applies only to each selected game executable on Windows. Rules remain active after closing LobbyLocker."
     : "Applies system-wide. Shared ranges can affect other apps; rules remain active after closing LobbyLocker.";
 }
 
 export function missingPrograms(status: Status | null): FirewallTarget[] {
-  if (!windowsBlocking(status)) return [];
+  if (!executableBlocking(status)) return [];
   const seen = new Set<string>();
   return savedTargets(status).filter((target) => {
     if (target.executablePath?.trim() || seen.has(target.gameId)) return false;
@@ -62,7 +69,7 @@ export function savedTargets(status: Status | null): FirewallTarget[] {
         gameName: game.name,
         regionId: region.id,
         regionName: region.name,
-        executablePath: windowsBlocking(status)
+        executablePath: executableBlocking(status)
           ? (game.executablePath ?? null)
           : null,
         endpoints: region.endpoints,

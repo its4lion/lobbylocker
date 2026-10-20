@@ -253,6 +253,52 @@ fn observed_blocks_are_independent_of_saved_choices_and_source_labels() {
     );
 }
 #[test]
+fn all_apps_readback_matches_unscoped_targets_without_claiming_scoped_rules_are_global() {
+    let mut game = game();
+    game.executable_path = None;
+    let scoped = windows_snapshot(&windows()).unwrap();
+    assert_eq!(
+        region_states(
+            std::slice::from_ref(&game),
+            &scoped,
+            FirewallScope::SystemWide
+        )["example:custom"],
+        RegionState::None
+    );
+    let mut all_apps = windows();
+    all_apps["rules"][0]["program"] = Value::Null;
+    let report = windows_snapshot(&all_apps).unwrap();
+    let preferences = crate::model::Preferences {
+        blocked_regions: vec!["example:custom".into()],
+        windows_blocking_scope: FirewallScope::SystemWide,
+        ..Default::default()
+    };
+    let desired = crate::model::resolve_rules_for_scope(
+        std::slice::from_ref(&game),
+        &preferences,
+        FirewallScope::SystemWide,
+    )
+    .unwrap();
+    assert_eq!(report.keys(), expected_keys(&desired).unwrap());
+    assert_eq!(
+        region_states(
+            std::slice::from_ref(&game),
+            &report,
+            FirewallScope::SystemWide
+        )["example:custom"],
+        RegionState::Blocked
+    );
+    let observed = observed_targets(
+        &[game],
+        &report,
+        FirewallScope::SystemWide,
+        &BTreeSet::from(["example".into()]),
+    );
+    assert_eq!(observed.len(), 1);
+    assert!(observed[0].executable_path.is_none());
+}
+
+#[test]
 fn program_scope_not_rule_name_determines_windows_coverage() {
     let mut game = game();
     let report = windows_snapshot(&windows()).unwrap();
