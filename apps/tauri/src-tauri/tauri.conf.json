@@ -50,10 +50,16 @@
     "linux": {
       "deb": {
         "depends": ["nftables", "pkexec"],
-        "preRemoveScript": "linux/deb-prerm.sh"
+        "preRemoveScript": "linux/deb-prerm.sh",
+        "files": {
+          "/usr/share/polkit-1/actions/org.lobbylocker.firewall.policy": "linux/org.lobbylocker.firewall.policy"
+        }
       },
       "rpm": {
-        "preRemoveScript": "linux/rpm-preun.sh"
+        "preRemoveScript": "linux/rpm-preun.sh",
+        "files": {
+          "/usr/share/polkit-1/actions/org.lobbylocker.firewall.policy": "linux/org.lobbylocker.firewall.policy"
+        }
       }
     },
     "windows": {
