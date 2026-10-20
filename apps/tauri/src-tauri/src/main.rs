@@ -67,7 +67,6 @@ fn main() {
             commands::create_game,
             commands::refresh_game,
             commands::ensure_fresh_data,
-            commands::restart_as_admin,
             commands::check_ping,
             commands::apply_rules,
             commands::reset_rules,

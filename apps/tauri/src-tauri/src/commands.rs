@@ -233,55 +233,6 @@ pub async fn ensure_fresh_data(state: tauri::State<'_, Backend>, game_id: String
 }
 
 #[tauri::command]
-pub fn restart_as_admin(app: tauri::AppHandle) -> Result<()> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::{os::windows::ffi::OsStrExt, ptr};
-        use windows_sys::Win32::UI::{
-            Shell::{IsUserAnAdmin, ShellExecuteW},
-            WindowsAndMessaging::SW_SHOWNORMAL,
-        };
-
-        if unsafe { IsUserAnAdmin() } != 0 {
-            return Err("LobbyLocker is already running as administrator.".into());
-        }
-        let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-        if !executable.is_file() {
-            return Err("The current LobbyLocker executable is unavailable.".into());
-        }
-        let verb: Vec<u16> = std::ffi::OsStr::new("runas")
-            .encode_wide()
-            .chain(Some(0))
-            .collect();
-        let executable: Vec<u16> = executable
-            .as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect();
-        let result = unsafe {
-            ShellExecuteW(
-                ptr::null_mut(),
-                verb.as_ptr(),
-                executable.as_ptr(),
-                ptr::null(),
-                ptr::null(),
-                SW_SHOWNORMAL,
-            )
-        };
-        if result as usize <= 32 {
-            return Err("Windows did not start the administrator session.".into());
-        }
-        app.exit(0);
-        Ok(())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = app;
-        Err("Restart as administrator is available on Windows only.".into())
-    }
-}
-
-#[tauri::command]
 pub async fn check_ping(
     state: tauri::State<'_, Backend>,
     game_id: String,

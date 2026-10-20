@@ -3,7 +3,6 @@
   import GameFilesCard from "$lib/components/settings/GameFilesCard.svelte";
   import LibraryFoldersCard from "$lib/components/settings/LibraryFoldersCard.svelte";
   import FirewallRecoveryCard from "$lib/components/settings/FirewallRecoveryCard.svelte";
-  import AdminCard from "$lib/components/settings/AdminCard.svelte";
   import UpdatesCard from "$lib/components/settings/UpdatesCard.svelte";
   let {
     app,
@@ -23,7 +22,6 @@
 
 <div class="grid gap-5 xl:grid-cols-2">
   <GameFilesCard {app} />
-  {#if app.status?.snapshot.platform === "windows"}<AdminCard {app} />{/if}
   {#if app.status?.selfUpdateSupported}<UpdatesCard {app} />{/if}
   <LibraryFoldersCard {app} {onmanage} />
   <FirewallRecoveryCard {app} {onreset} />
