@@ -1,5 +1,7 @@
+#[cfg(target_os = "linux")]
+use crate::inspection::ReadbackFailure;
 use crate::{
-    inspection::{self, Inspection, ReadbackFailure, ReadbackResult},
+    inspection::{self, Inspection, ReadbackResult},
     model::{normalize_address, parse_ports, windows_program, FirewallRule, Protocol},
     Result,
 };
