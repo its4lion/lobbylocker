@@ -23,3 +23,7 @@ updates:
     groups:
       workflow-actions:
         patterns: ["*"]
+    ignore:
+      # The Rust toolchain pin tracks the minimum supported Rust version from
+      # Cargo.toml, not the latest release, so it must not float.
+      - dependency-name: "dtolnay/rust-toolchain"
