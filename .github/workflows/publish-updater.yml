@@ -3,12 +3,18 @@ name: Publish Updater
 run-name: >-
   ${{ github.event_name == 'release'
       && format('Updater feed for {0}', github.event.release.tag_name)
+      || inputs.tag && format('Refresh updater feed for {0}', inputs.tag)
       || 'Publish the release candidate' }}
 
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable tag to refresh (leave empty to publish the candidate draft)
+        required: false
+        type: string
 
 concurrency:
   group: publish-updater
@@ -20,7 +26,7 @@ permissions:
 jobs:
   publish-candidate:
     name: Publish the candidate draft
-    if: ${{ github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.tag == '' }}
     runs-on: ubuntu-24.04
     env:
       GH_REPO: ${{ github.repository }}
@@ -87,14 +93,14 @@ jobs:
           fi
           bump_sha=$(git rev-parse HEAD)
 
-          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-            -f target_commitish="${bump_sha}" >/dev/null
-          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-            -F draft=false >/dev/null
+          # The CLI preserves tag_name when updating and publishing a draft.
+          gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --tag "${TAG}" --target "${bump_sha}" \
+            --draft=false --prerelease=false
 
-          read -r still_draft still_prerelease <<< "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --jq '[.draft, .prerelease] | @tsv')"
-          if [[ "${still_draft}" != "false" || "${still_prerelease}" != "false" ]]; then
-            echo "Publishing ${TAG} failed (draft=${still_draft}, prerelease=${still_prerelease})." >&2
+          read -r published_tag still_draft still_prerelease <<< "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --jq '[.tag_name, .draft, .prerelease] | @tsv')"
+          if [[ "${published_tag}" != "${TAG}" || "${still_draft}" != "false" || "${still_prerelease}" != "false" ]]; then
+            echo "Publishing ${TAG} failed (tag=${published_tag}, draft=${still_draft}, prerelease=${still_prerelease})." >&2
             exit 1
           fi
           echo "Published ${TAG} at ${bump_sha}."
@@ -102,7 +108,10 @@ jobs:
   feed:
     name: Publish the updater manifest
     needs: publish-candidate
-    if: always()
+    if: >-
+      always() && !cancelled() &&
+      (github.event_name == 'release' || inputs.tag != '' ||
+       needs.publish-candidate.result == 'success')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -115,6 +124,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           EVENT_TAG: ${{ github.event.release.tag_name }}
           CANDIDATE_TAG: ${{ needs.publish-candidate.outputs.tag }}
+          REQUESTED_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
@@ -122,28 +132,32 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
             tag="${EVENT_TAG}"
           else
-            tag="${CANDIDATE_TAG}"
+            tag="${REQUESTED_TAG:-${CANDIDATE_TAG}}"
           fi
           if [[ -z "${tag}" || "${tag}" == "updater" ]]; then
             echo "Nothing to publish to the updater feed."
             exit 0
           fi
 
-          # Read the real release flags: only a published, non-prerelease
-          # release may update the stable feed.
-          flags=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '[.draft, .prerelease] | @tsv' 2>/dev/null) || flags=""
-          if [[ -z "${flags}" ]]; then
-            echo "${tag} is not a published release yet and never reaches the stable feed."
+          # A missing stable release or API failure must fail, not silently
+          # leave the old feed in place while the workflow reports success.
+          flags=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '[.tag_name, .draft, .prerelease] | @tsv')
+          read -r actual_tag draft prerelease <<< "${flags}"
+          if [[ "${actual_tag}" != "${tag}" ]]; then
+            echo "Expected release ${tag}, got ${actual_tag}." >&2
+            exit 1
+          fi
+          if [[ "${draft}" == "true" || "${prerelease}" == "true" ]]; then
+            echo "Drafts and prereleases never reach the stable feed."
             exit 0
           fi
-          read -r draft prerelease <<< "${flags}"
-          if [[ "${prerelease}" == "true" ]]; then
-            echo "${tag} is a prerelease and never reaches the stable feed."
-            exit 0
+          if [[ "${draft}" != "false" || "${prerelease}" != "false" ]]; then
+            echo "Cannot confirm publication status for ${tag}." >&2
+            exit 1
           fi
-          if [[ "${draft}" != "false" ]]; then
-            echo "${tag} is not published yet and never reaches the stable feed."
-            exit 0
+          if [[ ! "${tag}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Expected a stable version tag such as v0.0.3, got ${tag}." >&2
+            exit 1
           fi
 
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
