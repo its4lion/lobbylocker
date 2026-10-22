@@ -569,6 +569,249 @@ fn executable_detection_is_read_only_and_survives_library_and_game_edits() {
 }
 
 #[test]
+fn saved_overwatch_launchers_are_resolved_at_runtime_without_rewriting_user_files() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let config = root.path().join("config");
+    let store = Store::open(config.clone(), &defaults).unwrap();
+    let directory = root.path().join("Custom install/Overwatch");
+    std::fs::create_dir_all(directory.join("_retail_")).unwrap();
+    let launcher = directory.join("Overwatch Launcher.exe");
+    std::fs::write(&launcher, b"never executed").unwrap();
+    let executable = directory.join("_retail_/Overwatch.exe");
+    std::fs::write(&executable, b"never executed").unwrap();
+    let mut game = store.default_game("overwatch2").unwrap();
+    game.note = "Preserve my custom note".into();
+    game.regions[0].endpoints[0].address = "203.0.113.8".into();
+    game.executable_path = Some(launcher.to_str().unwrap().into());
+    store.save_game(&game).unwrap();
+    let mut custom = crate::installed::empty_game("custom-ow".into(), "My Overwatch").unwrap();
+    custom.executable_path = game.executable_path.clone();
+    store.save_game(&custom).unwrap();
+    let mut preferences = store.snapshot().unwrap().preferences;
+    preferences.library_game_ids = vec![custom.id.clone(), game.id.clone()];
+    preferences.blocked_regions = vec![format!("overwatch2:{}", game.regions[0].id)];
+    store.save_preferences(&preferences).unwrap();
+    let original = std::fs::read(config.join("games/overwatch2.json")).unwrap();
+    let original_custom = std::fs::read(config.join("games/custom-ow.json")).unwrap();
+    let saved_preferences = std::fs::read(config.join("preferences.json")).unwrap();
+
+    let engine = Engine::new(store).unwrap();
+    let before = engine.runtime();
+    let resolved = crate::installed::resolve_executable(launcher.to_str().unwrap()).unwrap();
+    for id in ["overwatch2", "custom-ow"] {
+        assert_eq!(
+            before
+                .snapshot
+                .games
+                .iter()
+                .find(|game| game.id == id)
+                .unwrap()
+                .executable_path
+                .as_deref(),
+            Some(resolved.as_str())
+        );
+    }
+    let effective = before
+        .snapshot
+        .games
+        .iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    assert_eq!(effective.regions, game.regions);
+    assert_eq!(effective.note, game.note);
+    assert_eq!(before.snapshot.preferences, preferences);
+    assert!(!before.dirty);
+    assert!(before.applied_count.is_none());
+    assert!(before.applied_targets.is_none());
+    assert!(before.samples.is_empty());
+
+    engine.detect_game_executables(&[]).unwrap();
+    engine
+        .set_library_games(preferences.library_game_ids, &[])
+        .unwrap();
+    let after = engine.runtime();
+    assert_eq!(after.snapshot.games, before.snapshot.games);
+    assert_eq!(after.generation, before.generation);
+    assert_eq!(after.applied_targets, before.applied_targets);
+    assert_eq!(after.applied_count, before.applied_count);
+    assert_eq!(after.dirty, before.dirty);
+    assert_eq!(
+        std::fs::read(config.join("games/overwatch2.json")).unwrap(),
+        original
+    );
+    assert_eq!(
+        std::fs::read(config.join("games/custom-ow.json")).unwrap(),
+        original_custom
+    );
+    assert_eq!(
+        std::fs::read(config.join("preferences.json")).unwrap(),
+        saved_preferences
+    );
+}
+
+#[test]
+fn incomplete_saved_overwatch_launcher_never_becomes_a_firewall_target() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let config = root.path().join("config");
+    let store = Store::open(config.clone(), &defaults).unwrap();
+    let directory = root.path().join("Incomplete Overwatch");
+    std::fs::create_dir_all(&directory).unwrap();
+    let launcher = directory.join("Overwatch Launcher.exe");
+    std::fs::write(&launcher, b"never executed").unwrap();
+    let mut game = store.default_game("overwatch2").unwrap();
+    game.executable_path = Some(launcher.to_str().unwrap().into());
+    store.save_game(&game).unwrap();
+    let original = std::fs::read(config.join("games/overwatch2.json")).unwrap();
+    let engine = Engine::new(store).unwrap();
+    let effective = engine
+        .runtime()
+        .snapshot
+        .games
+        .into_iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    assert!(effective.executable_path.is_none());
+    assert!(engine
+        .save_game(&game)
+        .unwrap_err()
+        .contains("Choose Overwatch.exe"));
+    assert_eq!(
+        std::fs::read(config.join("games/overwatch2.json")).unwrap(),
+        original
+    );
+
+    // The UI edits the runtime copy, where the unresolved hint is hidden.
+    let mut edited = effective.clone();
+    edited.regions[0].probe_target = Some("203.0.113.8".into());
+    edited.regions[0].probe_custom = true;
+    edited.regions[1].probe_target = None;
+    engine.save_game(&edited).unwrap();
+    let saved = engine
+        .store
+        .snapshot()
+        .unwrap()
+        .games
+        .into_iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    assert_eq!(saved.executable_path, game.executable_path);
+    assert_eq!(saved.regions, edited.regions);
+
+    // Bundled data can also be merged without losing the hint or sending a feed request.
+    engine
+        .store
+        .mark_data_refresh_checked("overwatch2")
+        .unwrap();
+    engine.ensure_fresh_data("overwatch2").unwrap();
+    let saved = engine
+        .store
+        .snapshot()
+        .unwrap()
+        .games
+        .into_iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    assert_eq!(saved.executable_path, game.executable_path);
+    assert_eq!(
+        saved.regions[0].probe_target,
+        edited.regions[0].probe_target
+    );
+    assert!(saved.regions[1].probe_target.is_some());
+    let original = std::fs::read(config.join("games/overwatch2.json")).unwrap();
+    let preferences = Preferences {
+        blocked_regions: vec![format!("overwatch2:{}", game.regions[0].id)],
+        ..Preferences::default()
+    };
+    assert!(crate::model::resolve_rules_for_scope(
+        &[effective],
+        &preferences,
+        crate::model::FirewallScope::Executable,
+    )
+    .unwrap_err()
+    .contains("never falls back to system-wide"));
+
+    // A discovered copy from a different library cannot replace this manual install.
+    let other = root.path().join("Other install");
+    std::fs::create_dir_all(other.join("_retail_")).unwrap();
+    std::fs::write(other.join("_retail_/Overwatch.exe"), b"never executed").unwrap();
+    engine
+        .detect_game_executables(&[crate::installed::InstalledGame {
+            id: "overwatch2".into(),
+            name: "Overwatch 2".into(),
+            launcher: "Battle.net".into(),
+            directory: other,
+        }])
+        .unwrap();
+    assert!(engine
+        .runtime()
+        .snapshot
+        .games
+        .iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap()
+        .executable_path
+        .is_none());
+    assert_eq!(
+        std::fs::read(config.join("games/overwatch2.json")).unwrap(),
+        original
+    );
+
+    std::fs::create_dir_all(directory.join("_retail_")).unwrap();
+    let executable = directory.join("_retail_/Overwatch.exe");
+    std::fs::write(&executable, b"never executed").unwrap();
+    engine.detect_game_executables(&[]).unwrap();
+    let effective = engine
+        .runtime()
+        .snapshot
+        .games
+        .into_iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    assert_eq!(
+        std::fs::canonicalize(effective.executable_path.unwrap()).unwrap(),
+        std::fs::canonicalize(executable).unwrap()
+    );
+    assert_eq!(
+        std::fs::read(config.join("games/overwatch2.json")).unwrap(),
+        original
+    );
+}
+
+#[test]
+fn saving_an_overwatch_launcher_persists_only_the_verified_game_binary() {
+    let root = tempfile::tempdir().unwrap();
+    let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
+    let config = root.path().join("config");
+    let store = Store::open(config.clone(), &defaults).unwrap();
+    let mut game = store.default_game("overwatch2").unwrap();
+    let engine = Engine::new(store).unwrap();
+    let directory = root.path().join("Overwatch");
+    std::fs::create_dir_all(directory.join("_retail_")).unwrap();
+    let launcher = directory.join("Overwatch Launcher.exe");
+    std::fs::write(&launcher, b"never executed").unwrap();
+    let executable = directory.join("_retail_/Overwatch.exe");
+    std::fs::write(&executable, b"never executed").unwrap();
+    game.executable_path = Some(launcher.to_str().unwrap().into());
+    let before = engine.runtime();
+    engine.save_game(&game).unwrap();
+    let saved =
+        Game::from_json(&std::fs::read(config.join("games/overwatch2.json")).unwrap()).unwrap();
+    assert_eq!(
+        saved.executable_path,
+        Some(crate::installed::resolve_executable(launcher.to_str().unwrap()).unwrap())
+    );
+    assert_eq!(saved.regions, game.regions);
+    assert_eq!(saved.note, game.note);
+    let after = engine.runtime();
+    assert_eq!(after.snapshot.preferences, before.snapshot.preferences);
+    assert_eq!(after.applied_targets, before.applied_targets);
+    assert_eq!(after.applied_count, before.applied_count);
+    assert!(after.samples.is_empty());
+}
+
+#[test]
 fn executable_detection_never_replaces_an_explicitly_saved_path() {
     let root = tempfile::tempdir().unwrap();
     let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");

@@ -18,16 +18,88 @@ pub struct InstalledGame {
     pub directory: PathBuf,
 }
 
+const OVERWATCH_EXECUTABLES: &[&str] = &["_retail_/Overwatch.exe", "Overwatch.exe"];
+
+pub(crate) fn is_overwatch_launcher(path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("Overwatch Launcher.exe"))
+}
+
+/// A Battle.net launcher is an installation hint, never a firewall program.
+/// Leave other manual paths untouched and only resolve known binaries inside
+/// this installation. This also repairs saved paths without running the launcher.
+pub fn resolve_executable(path: &str) -> Result<String> {
+    let selected = Path::new(path);
+    if !is_overwatch_launcher(selected) {
+        return Ok(path.to_owned());
+    }
+    selected
+        .parent()
+        .filter(|directory| directory.is_absolute())
+        .and_then(|directory| executable_in(directory, OVERWATCH_EXECUTABLES))
+        .ok_or_else(|| "Overwatch Launcher.exe only starts the game. Choose Overwatch.exe in the _retail_ folder after completing the Battle.net installation.".into())
+}
+
+/// Recognize a Battle.net installation, not an arbitrary custom Overwatch.exe.
+pub fn is_battlenet_overwatch_executable(path: &Path) -> bool {
+    if !path.is_absolute()
+        || !path
+            .file_name()
+            .is_some_and(|name| name.eq_ignore_ascii_case("Overwatch.exe"))
+    {
+        return false;
+    }
+    let Some(directory) = path.parent() else {
+        return false;
+    };
+    let mut roots = vec![directory];
+    if directory
+        .file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("_retail_"))
+    {
+        roots.extend(directory.parent());
+    }
+    let Ok(executable) = fs::canonicalize(path) else {
+        return false;
+    };
+    roots.into_iter().any(|root| {
+        root.join("Overwatch Launcher.exe").is_file()
+            && OVERWATCH_EXECUTABLES.iter().any(|candidate| {
+                executable_in(root, &[*candidate])
+                    .and_then(|path| fs::canonicalize(path).ok())
+                    .is_some_and(|path| path == executable)
+            })
+    })
+}
+
+/// A different available binary requires explicit replacement approval.
+pub fn requires_executable_replacement(current: Option<&str>, selected: &str) -> bool {
+    let Some(current) = current.map(Path::new).filter(|path| path.is_absolute()) else {
+        return false;
+    };
+    let Ok(current) = fs::canonicalize(current) else {
+        return false;
+    };
+    if !current.is_file() {
+        return false;
+    }
+    fs::canonicalize(selected).is_ok_and(|selected| selected != current)
+}
+
 /// Only known game binaries, never the first .exe in a folder or a launcher.
 /// Canonical containment also prevents installation symlinks escaping the game.
 pub(crate) fn game_executable(game: &InstalledGame) -> Option<String> {
     let candidates: &[&str] = match game.id.as_str() {
         "cs2" => &["game/bin/win64/cs2.exe"],
         "deadlock" => &["game/bin/win64/deadlock.exe"],
-        "overwatch2" => &["_retail_/Overwatch.exe", "Overwatch.exe"],
+        "overwatch2" => OVERWATCH_EXECUTABLES,
         _ => return None,
     };
-    let directory = fs::canonicalize(&game.directory).ok()?;
+    executable_in(&game.directory, candidates)
+}
+
+fn executable_in(directory: &Path, candidates: &[&str]) -> Option<String> {
+    let directory = fs::canonicalize(directory).ok()?;
     candidates.iter().find_map(|relative| {
         let path = fs::canonicalize(directory.join(relative)).ok()?;
         if !path.is_file() || !path.starts_with(&directory) {

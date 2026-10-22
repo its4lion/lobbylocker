@@ -1,5 +1,6 @@
 use lobbylocker_core::{
     connections,
+    engine::Engine,
     firewall::{self, Request},
     latency,
     model::resolve_rules,
@@ -25,7 +26,7 @@ fn run() -> lobbylocker_core::Result<()> {
     }
     let defaults = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../../data/games");
     let store = Store::open(Store::default_directory()?, &defaults)?;
-    let snapshot = store.snapshot()?;
+    let snapshot = Engine::new(store)?.runtime().snapshot;
     match command.as_str() {
         "list" => println!("{}", serde_json::to_string_pretty(&snapshot).map_err(|e| e.to_string())?),
         "preview" => {

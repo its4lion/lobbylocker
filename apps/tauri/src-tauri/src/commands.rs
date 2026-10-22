@@ -409,36 +409,80 @@ fn save_game_executable(engine: &Engine, game_id: &str, path: &str) -> Result<()
 }
 
 /// Attach a program to an existing game without replacing its regions or targets.
+/// Revalidate a supplied picker result instead of opening a second file dialog.
 #[tauri::command]
-pub async fn set_game_executable(state: tauri::State<'_, Backend>, game_id: String) -> Result<()> {
+pub async fn set_game_executable(
+    state: tauri::State<'_, Backend>,
+    game_id: String,
+    path: Option<String>,
+) -> Result<bool> {
+    let translator = state
+        .locales
+        .translator(&state.engine.runtime().snapshot.preferences.language);
     work(state, move |engine| {
-        if !engine
+        let game = engine
             .runtime()
             .snapshot
             .games
-            .iter()
-            .any(|game| game.id == game_id)
-        {
-            return Err("Game not found.".into());
-        }
-        let dialog = rfd::FileDialog::new();
-        #[cfg(target_os = "windows")]
-        let dialog = dialog.add_filter("Game executable", &["exe"]);
-        let Some(path) = dialog.pick_file() else {
-            return Ok(());
+            .into_iter()
+            .find(|game| game.id == game_id)
+            .ok_or("Game not found.")?;
+        let supplied = path.is_some();
+        let path = match path {
+            Some(path) => path,
+            None => {
+                let dialog = rfd::FileDialog::new();
+                #[cfg(target_os = "windows")]
+                let dialog = dialog.add_filter("Game executable", &["exe"]);
+                let Some(path) = dialog.pick_file() else {
+                    return Ok(false);
+                };
+                path.to_str()
+                    .ok_or("The executable path is not valid Unicode.")?
+                    .to_owned()
+            }
         };
-        let path = path
-            .to_str()
-            .ok_or("The executable path is not valid Unicode.")?;
-        save_game_executable(engine, &game_id, path)
+        validate_executable(&path)?;
+        let path = installed::resolve_executable(&path)?;
+        if supplied
+            && installed::requires_executable_replacement(game.executable_path.as_deref(), &path)
+            && rfd::MessageDialog::new()
+                .set_title("LobbyLocker")
+                .set_description(translator.format(
+                    "Replace the existing game executable?\n\nCurrent: {current}\nNew: {new}\n\nFirewall rules are unchanged until Apply.",
+                    &[("current", game.executable_path.as_deref().unwrap_or_default()), ("new", &path)],
+                ))
+                .set_buttons(rfd::MessageButtons::OkCancel)
+                .show() != rfd::MessageDialogResult::Ok
+        {
+            return Ok(false);
+        }
+        save_game_executable(engine, &game_id, &path)?;
+        Ok(true)
     })
     .await
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExecutableSelection {
     path: String,
     icon: Option<String>,
+    game_id: Option<String>,
+}
+
+fn executable_selection(path: &str) -> Result<ExecutableSelection> {
+    validate_executable(path)?;
+    let path = installed::resolve_executable(path)?;
+    let executable = std::path::Path::new(&path);
+    let game_id =
+        installed::is_battlenet_overwatch_executable(executable).then(|| "overwatch2".into());
+    let icon = lobbylocker_core::icons::executable_icon(executable);
+    Ok(ExecutableSelection {
+        path,
+        icon,
+        game_id,
+    })
 }
 
 /// Read-only path selection and bounded icon-resource extraction. Never launches the game.
@@ -455,11 +499,8 @@ pub async fn select_game_executable(
         };
         let path = path
             .to_str()
-            .ok_or("The executable path is not valid Unicode.")?
-            .to_owned();
-        validate_executable(&path)?;
-        let icon = lobbylocker_core::icons::executable_icon(std::path::Path::new(&path));
-        Ok(Some(ExecutableSelection { path, icon }))
+            .ok_or("The executable path is not valid Unicode.")?;
+        executable_selection(path).map(Some)
     })
     .await
 }

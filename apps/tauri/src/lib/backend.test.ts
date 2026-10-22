@@ -287,6 +287,146 @@ describe("native bridge", () => {
       "select_game_executable",
     ]);
   });
+  it("adds resolved Overwatch selections as the built-in game without replacing server data or applying blocks", async () => {
+    const loaded = emptyRead();
+    loaded.snapshot.platform = "windows";
+    loaded.snapshot.preferences.libraryGameIds = ["custom-existing"];
+    loaded.snapshot.preferences.blockedRegions = ["overwatch2:eu"];
+    loaded.dirty = true;
+    const game: Game = {
+      schemaVersion: 1,
+      id: "overwatch2",
+      name: "Overwatch 2",
+      source: "bundled catalogue",
+      updatedAt: null,
+      note: "My custom note",
+      regions: [
+        {
+          id: "eu",
+          name: "Europe",
+          area: "Europe",
+          probeTarget: "203.0.113.8",
+          endpoints: [
+            {
+              id: "custom-target",
+              address: "203.0.113.9",
+              protocol: "udp",
+              ports: null,
+              custom: true,
+            },
+          ],
+        },
+      ],
+    };
+    loaded.snapshot.games = [
+      game,
+      { ...game, id: "custom-existing", name: "Existing game" },
+    ];
+    const selection = {
+      path: "C:\\Program Files (x86)\\Overwatch\\_retail_\\Overwatch.exe",
+      icon: null,
+      gameId: "overwatch2",
+    };
+    native.invoke.mockImplementation(
+      async (command: string, args?: Record<string, unknown>) => {
+        if (command === "select_game_executable") return selection;
+        if (command === "set_game_executable") {
+          expect(args).toEqual({
+            gameId: "overwatch2",
+            path: selection.path,
+          });
+          loaded.snapshot.games[0].executablePath = selection.path;
+          return true;
+        }
+        if (command === "set_library_games")
+          loaded.snapshot.preferences.libraryGameIds = args?.ids as string[];
+        if (command === "get_status") return structuredClone(loaded);
+        if (command === "get_custom_icons") return {};
+      },
+    );
+    const app = new Backend();
+    app.status = structuredClone(loaded);
+    app.selected = "custom-existing";
+    expect(await app.addExecutable()).toEqual(selection);
+    expect(app.selected).toBe("overwatch2");
+    expect(app.game).toEqual({ ...game, executablePath: selection.path });
+    expect(app.status?.snapshot.preferences.libraryGameIds).toEqual([
+      "custom-existing",
+      "overwatch2",
+    ]);
+    expect(app.status?.snapshot.preferences.blockedRegions).toEqual([
+      "overwatch2:eu",
+    ]);
+    expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
+      "select_game_executable",
+      "set_game_executable",
+      "set_library_games",
+      "get_status",
+      "get_custom_icons",
+    ]);
+    await app.addExecutable();
+    expect(app.status?.snapshot.preferences.libraryGameIds).toEqual([
+      "custom-existing",
+      "overwatch2",
+    ]);
+  });
+  it("keeps ordinary executable selections read-only for the custom-game form", async () => {
+    const selection = {
+      path: "C:\\Games\\My game.exe",
+      icon: "data:image/png;base64,aWNvbg==",
+      gameId: null,
+    };
+    native.invoke.mockResolvedValueOnce(selection);
+    const app = new Backend();
+    expect(await app.addExecutable()).toEqual(selection);
+    expect(app.pickedIcon).toBe(selection.icon);
+    expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
+      "select_game_executable",
+    ]);
+  });
+  it("does not modify games on cancellation or an unresolved launcher error", async () => {
+    const app = new Backend();
+    app.status = status();
+    app.pickedIcon = "data:image/png;base64,aWNvbg==";
+    native.invoke.mockResolvedValueOnce(null);
+    expect(await app.addExecutable()).toBeNull();
+    const error =
+      "Overwatch Launcher.exe only starts the game. Choose Overwatch.exe in the _retail_ folder after completing the Battle.net installation.";
+    native.invoke.mockRejectedValueOnce(error);
+    expect(await app.addExecutable()).toBeNull();
+    expect(app.error).toBe(error);
+    expect(app.pickedIcon).toBe("data:image/png;base64,aWNvbg==");
+    expect(app.status.snapshot.preferences.libraryGameIds).toEqual([]);
+    expect(
+      native.invoke.mock.calls.every(
+        ([command]) => command === "select_game_executable",
+      ),
+    ).toBe(true);
+  });
+  it("does not add or change a game when executable replacement is declined", async () => {
+    const app = new Backend();
+    app.status = status();
+    app.status.snapshot.games = [
+      { id: "overwatch2", executablePath: "C:\\Existing\\Overwatch.exe" },
+    ] as Game[];
+    app.selected = "custom-existing";
+    native.invoke.mockResolvedValueOnce({
+      path: "D:\\Overwatch\\_retail_\\Overwatch.exe",
+      icon: null,
+      gameId: "overwatch2",
+    });
+    native.invoke.mockResolvedValueOnce(false);
+    expect(await app.addExecutable()).toBeNull();
+    expect(app.status.snapshot.games[0].executablePath).toBe(
+      "C:\\Existing\\Overwatch.exe",
+    );
+    expect(app.status.snapshot.preferences.libraryGameIds).toEqual([]);
+    expect(app.selected).toBe("custom-existing");
+    expect(native.invoke.mock.calls.map(([command]) => command)).toEqual([
+      "select_game_executable",
+      "set_game_executable",
+    ]);
+  });
   it("uses detected Windows executables on startup and blocks without a second picker", async () => {
     const loaded = emptyRead();
     loaded.snapshot.platform = "windows";

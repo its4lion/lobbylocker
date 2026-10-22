@@ -114,3 +114,8 @@ export interface NewGame {
   ports: string | null;
   executablePath: string | null;
 }
+export interface ExecutableSelection {
+  path: string;
+  icon: string | null;
+  gameId?: string | null;
+}

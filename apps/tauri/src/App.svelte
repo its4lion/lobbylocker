@@ -104,11 +104,18 @@
   }
   async function addExecutable() {
     const needsExecutable = executableBlocking(app.status);
-    const path = needsExecutable ? await app.pickExecutable() : "";
-    if (path !== null) {
+    const selection = needsExecutable
+      ? await app.addExecutable()
+      : { path: "", gameId: null };
+    if (selection !== null) {
+      if (selection.gameId) {
+        manageOpen = false;
+        showGame(selection.gameId);
+        return;
+      }
       if (compact && !(await changeLayout("expanded"))) return;
       manageOpen = false;
-      customPath = path;
+      customPath = selection.path;
       view = "custom";
     }
   }

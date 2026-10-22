@@ -53,7 +53,11 @@
                   >
                     {game.executablePath}
                   </p>{:else}<p class="mt-1 text-xs text-muted-foreground">
-                    {app.t("Executable not found")}
+                    {app.t(
+                      game.id === "overwatch2"
+                        ? "Choose Overwatch.exe in the _retail_ folder, not Overwatch Launcher.exe."
+                        : "Executable not found",
+                    )}
                   </p>{/if}
               </div>
               <Button

@@ -2,6 +2,98 @@
 use super::*;
 
 #[test]
+fn only_a_different_available_executable_requires_replacement_approval() {
+    let root = tempfile::tempdir().unwrap();
+    let current = root.path().join("current.exe");
+    let selected = root.path().join("selected.exe");
+    fs::write(&current, b"never executed").unwrap();
+    fs::write(&selected, b"never executed").unwrap();
+    let current = current.to_str().unwrap();
+    let selected = selected.to_str().unwrap();
+    assert!(requires_executable_replacement(Some(current), selected));
+    assert!(!requires_executable_replacement(Some(current), current));
+    assert!(!requires_executable_replacement(None, selected));
+    assert!(!requires_executable_replacement(
+        Some(root.path().to_str().unwrap()),
+        selected
+    ));
+    fs::remove_file(current).unwrap();
+    assert!(!requires_executable_replacement(Some(current), selected));
+}
+
+#[test]
+fn overwatch_launcher_resolves_verified_retail_or_legacy_binary_without_running_it() {
+    for launcher_name in ["Overwatch Launcher.exe", "OVERWATCH LAUNCHER.EXE"] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("Custom games/Overwatch");
+        fs::create_dir_all(directory.join("_retail_")).unwrap();
+        let launcher = directory.join(launcher_name);
+        fs::write(&launcher, b"never executed").unwrap();
+        fs::write(directory.join("Battle.net.exe"), b"not the game").unwrap();
+        fs::write(directory.join("_retail_/Other.exe"), b"not the game").unwrap();
+        assert!(resolve_executable(launcher.to_str().unwrap())
+            .unwrap_err()
+            .contains("Choose Overwatch.exe in the _retail_ folder"));
+
+        let legacy = directory.join("Overwatch.exe");
+        fs::write(&legacy, b"never executed").unwrap();
+        let resolved = resolve_executable(launcher.to_str().unwrap()).unwrap();
+        assert_eq!(
+            fs::canonicalize(resolved).unwrap(),
+            fs::canonicalize(&legacy).unwrap()
+        );
+
+        let retail = directory.join("_retail_/Overwatch.exe");
+        fs::write(&retail, b"never executed").unwrap();
+        let resolved = resolve_executable(launcher.to_str().unwrap()).unwrap();
+        assert_eq!(
+            fs::canonicalize(&resolved).unwrap(),
+            fs::canonicalize(&retail).unwrap()
+        );
+        assert_eq!(resolve_executable(&resolved).unwrap(), resolved);
+        #[cfg(target_os = "windows")]
+        assert!(crate::model::windows_program(&resolved).is_ok());
+
+        // A stale saved launcher can still identify a valid installation.
+        fs::remove_file(&launcher).unwrap();
+        assert_eq!(
+            resolve_executable(launcher.to_str().unwrap()).unwrap(),
+            resolved
+        );
+    }
+    for path in [
+        r"D:\Other install\game.exe",
+        r"D:\Games\Overwatch\_retail_\Overwatch.exe",
+        r"D:\Games\Battle.net.exe",
+    ] {
+        assert_eq!(resolve_executable(path).unwrap(), path);
+    }
+    assert!(resolve_executable("Overwatch Launcher.exe").is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn overwatch_launcher_cannot_resolve_an_external_binary_through_symlinks() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("Overwatch");
+    fs::create_dir_all(directory.join("_retail_")).unwrap();
+    let outside = root.path().join("outside.exe");
+    fs::write(&outside, b"never executed").unwrap();
+    fs::write(directory.join("Overwatch Launcher.exe"), b"never executed").unwrap();
+    std::os::unix::fs::symlink(&outside, directory.join("_retail_/Overwatch.exe")).unwrap();
+    std::os::unix::fs::symlink(&outside, directory.join("Overwatch.exe")).unwrap();
+    assert!(
+        resolve_executable(directory.join("Overwatch Launcher.exe").to_str().unwrap()).is_err()
+    );
+    assert!(!is_battlenet_overwatch_executable(
+        &directory.join("_retail_/Overwatch.exe")
+    ));
+    assert!(!is_battlenet_overwatch_executable(
+        &directory.join("Overwatch.exe")
+    ));
+}
+
+#[test]
 fn supported_games_resolve_only_their_actual_installed_executables() {
     let root = tempfile::tempdir().unwrap();
     for (id, relative) in [

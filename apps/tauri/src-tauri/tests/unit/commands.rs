@@ -2,6 +2,94 @@
 use super::*;
 
 #[test]
+fn selecting_overwatch_launcher_returns_the_game_binary_and_builtin_identity() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("Custom install/Overwatch");
+    std::fs::create_dir_all(directory.join("_retail_")).unwrap();
+    let launcher = directory.join("Overwatch Launcher.exe");
+    std::fs::write(&launcher, b"never executed").unwrap();
+    let error = executable_selection(launcher.to_str().unwrap())
+        .err()
+        .unwrap();
+    assert!(error.contains("Choose Overwatch.exe in the _retail_ folder"));
+    let executable = directory.join("_retail_/Overwatch.exe");
+    std::fs::write(&executable, b"never executed").unwrap();
+    let selection = executable_selection(launcher.to_str().unwrap()).unwrap();
+    assert_eq!(selection.game_id.as_deref(), Some("overwatch2"));
+    assert_eq!(
+        std::fs::canonicalize(&selection.path).unwrap(),
+        std::fs::canonicalize(&executable).unwrap()
+    );
+    let wire = serde_json::to_value(&selection).unwrap();
+    assert_eq!(wire["gameId"], "overwatch2");
+    assert!(wire.get("game_id").is_none());
+    let direct = executable_selection(executable.to_str().unwrap()).unwrap();
+    assert_eq!(direct.game_id.as_deref(), Some("overwatch2"));
+    let unrelated = directory.join("My game.exe");
+    std::fs::write(&unrelated, b"never executed").unwrap();
+    let custom = executable_selection(unrelated.to_str().unwrap()).unwrap();
+    assert!(custom.game_id.is_none());
+    assert_eq!(custom.path, unrelated.to_str().unwrap());
+    for relative in [
+        "PrivateServer/Overwatch.exe",
+        "PrivateServer/_retail_/Overwatch.exe",
+    ] {
+        let custom = root.path().join(relative);
+        std::fs::create_dir_all(custom.parent().unwrap()).unwrap();
+        std::fs::write(&custom, b"never executed").unwrap();
+        assert!(executable_selection(custom.to_str().unwrap())
+            .unwrap()
+            .game_id
+            .is_none());
+    }
+    let legacy = directory.join("Overwatch.exe");
+    std::fs::write(&legacy, b"never executed").unwrap();
+    assert_eq!(
+        executable_selection(legacy.to_str().unwrap())
+            .unwrap()
+            .game_id
+            .as_deref(),
+        Some("overwatch2")
+    );
+
+    let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data/games");
+    let config = root.path().join("config");
+    let engine =
+        Engine::new(lobbylocker_core::store::Store::open(config.clone(), &defaults).unwrap())
+            .unwrap();
+    let before = engine.runtime();
+    save_game_executable(&engine, "overwatch2", launcher.to_str().unwrap()).unwrap();
+    let after = engine.runtime();
+    let game = after
+        .snapshot
+        .games
+        .iter()
+        .find(|game| game.id == "overwatch2")
+        .unwrap();
+    assert_eq!(
+        game.executable_path.as_deref(),
+        Some(selection.path.as_str())
+    );
+    assert_eq!(
+        game.regions,
+        before
+            .snapshot
+            .games
+            .iter()
+            .find(|game| game.id == "overwatch2")
+            .unwrap()
+            .regions
+    );
+    assert_eq!(after.snapshot.preferences, before.snapshot.preferences);
+    assert_eq!(after.applied_targets, before.applied_targets);
+    assert_eq!(after.applied_count, before.applied_count);
+    assert!(after.samples.is_empty());
+    let saved =
+        Game::from_json(&std::fs::read(config.join("games/overwatch2.json")).unwrap()).unwrap();
+    assert_eq!(saved.executable_path, game.executable_path);
+}
+
+#[test]
 fn attaching_an_executable_preserves_game_targets_selections_and_applied_state() {
     let root = tempfile::tempdir().unwrap();
     let defaults = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../data/games");

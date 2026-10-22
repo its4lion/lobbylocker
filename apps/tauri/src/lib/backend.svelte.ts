@@ -8,6 +8,7 @@ import { pingRequest } from "./ping";
 import { Requests } from "./requests";
 import type {
   Connection,
+  ExecutableSelection,
   Game,
   Languages,
   NewGame,
@@ -482,16 +483,47 @@ export class Backend {
   async pickExecutable(): Promise<string | null> {
     let path: string | null = null;
     await this.run(async () => {
-      const selection = await this.requests.request<{
-        path: string;
-        icon: string | null;
-      } | null>("select_game_executable");
+      const selection = await this.requests.request<ExecutableSelection | null>(
+        "select_game_executable",
+      );
       if (selection) {
         path = selection.path;
         this.pickedIcon = selection.icon;
       }
     }, false);
     return path;
+  }
+  async addExecutable(): Promise<ExecutableSelection | null> {
+    let selection: ExecutableSelection | null = null;
+    const success = await this.run(async () => {
+      const chosen = await this.requests.request<ExecutableSelection | null>(
+        "select_game_executable",
+      );
+      if (!chosen) return;
+      if (chosen.gameId) {
+        const attached = await this.requests.request<boolean>(
+          "set_game_executable",
+          {
+            gameId: chosen.gameId,
+            path: chosen.path,
+          },
+        );
+        if (!attached) return;
+        await this.requests.request("set_library_games", {
+          ids: [
+            ...new Set([
+              ...(this.status?.snapshot.preferences.libraryGameIds ?? []),
+              chosen.gameId,
+            ]),
+          ],
+        });
+        await this.reload();
+        this.selected = chosen.gameId;
+      }
+      this.pickedIcon = chosen.icon;
+      selection = chosen;
+    }, false);
+    return success ? selection : null;
   }
   create(input: NewGame) {
     return this.run(async () => {

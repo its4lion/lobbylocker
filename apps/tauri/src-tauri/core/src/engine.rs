@@ -50,7 +50,7 @@ pub struct Runtime {
     /// successful read this is the loaded selection; afterwards it is native keys.
     pending_baseline: PendingKeys,
     /// Runtime-only fallbacks. Discovery never rewrites existing game files,
-    /// and an explicitly saved executable always wins over detection.
+    /// and an explicitly saved executable (with known launchers resolved) wins.
     detected_executables: BTreeMap<String, String>,
     pub dirty: bool,
     pub message: String,
@@ -65,7 +65,8 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(store: Store) -> Result<Arc<Self>> {
-        let snapshot = store.snapshot()?;
+        let mut snapshot = store.snapshot()?;
+        Self::resolve_executables(&mut snapshot, &BTreeMap::new());
         let pending_baseline = Self::pending_keys(&snapshot);
         Ok(Arc::new(Self {
             store,
@@ -97,12 +98,19 @@ impl Engine {
     }
 
     fn replace_snapshot(state: &mut Runtime, mut snapshot: Snapshot) {
-        for game in &mut snapshot.games {
-            if game.executable_path.is_none() {
-                game.executable_path = state.detected_executables.get(&game.id).cloned();
-            }
-        }
+        Self::resolve_executables(&mut snapshot, &state.detected_executables);
         state.snapshot = snapshot;
+    }
+
+    fn resolve_executables(snapshot: &mut Snapshot, detected: &BTreeMap<String, String>) {
+        for game in &mut snapshot.games {
+            game.executable_path = match game.executable_path.as_deref() {
+                // An incomplete install must never leave the launcher as an
+                // effective firewall target or silently select another install.
+                Some(path) => crate::installed::resolve_executable(path).ok(),
+                None => detected.get(&game.id).cloned(),
+            };
+        }
     }
 
     /// Resolve supported installations without a second file picker. This is
@@ -305,7 +313,7 @@ impl Engine {
 
     pub fn save_game(&self, game: &Game) -> Result<()> {
         let _operation = self.operation.lock().map_err(|e| e.to_string())?;
-        self.store.save_game(game)?;
+        self.persist_game(game)?;
         let snapshot = self.store.snapshot()?;
         let mut state = self.state.lock().map_err(|e| e.to_string())?;
         Self::replace_snapshot(&mut state, snapshot);
@@ -316,6 +324,26 @@ impl Engine {
             game.id
         );
         Ok(())
+    }
+
+    fn persist_game(&self, game: &Game) -> Result<()> {
+        let mut game = game.clone();
+        if let Some(path) = &game.executable_path {
+            game.executable_path = Some(crate::installed::resolve_executable(path)?);
+        } else {
+            // Runtime hides unresolved launchers from firewall targets. An
+            // unrelated edit or feed refresh must not erase that stored hint.
+            game.executable_path = self
+                .store
+                .snapshot()?
+                .games
+                .into_iter()
+                .find(|stored| stored.id == game.id)
+                .and_then(|stored| stored.executable_path)
+                .filter(|path| crate::installed::is_overwatch_launcher(std::path::Path::new(path)))
+                .map(|path| crate::installed::resolve_executable(&path).unwrap_or(path));
+        }
+        self.store.save_game(&game)
     }
 
     /// Library discovery settings never change pending firewall selections or probes.
@@ -418,7 +446,7 @@ impl Engine {
         let succeeded = fetched.is_some();
         let updated = fetched.unwrap_or(game);
         if updated != original {
-            self.store.save_game(&updated)?;
+            self.persist_game(&updated)?;
             let mut state = self.state.lock().map_err(|e| e.to_string())?;
             Self::replace_snapshot(&mut state, self.store.snapshot()?);
             state.generation += 1;
@@ -444,7 +472,7 @@ impl Engine {
             catalogue::merge_defaults(&mut game, defaults);
         }
         let updated = catalogue::refresh(&game)?;
-        self.store.save_game(&updated)?;
+        self.persist_game(&updated)?;
         let mut state = self.state.lock().map_err(|e| e.to_string())?;
         Self::replace_snapshot(&mut state, self.store.snapshot()?);
         state.generation += 1;
