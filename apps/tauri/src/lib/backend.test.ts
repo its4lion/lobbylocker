@@ -652,6 +652,37 @@ describe("native bridge", () => {
       ),
     ).toBe(false);
   });
+  it("writes saved-but-unwritten selections once the startup read releases the guard", async () => {
+    const loaded = emptyRead();
+    loaded.snapshot.games = [{ id: "deadlock", name: "Deadlock" }] as Game[];
+    loaded.snapshot.preferences.blockedRegions = ["deadlock:dxb"];
+    loaded.dirty = true;
+    native.invoke.mockImplementation(async (command: string) => {
+      if (command === "get_status") return loaded;
+      if (command === "get_languages") return { locales: [], warnings: [] };
+      if (command === "verify_firewall") return loaded;
+      if (command === "scan_games") return { games: [], warnings: [] };
+      if (command === "apply_rules") {
+        loaded.appliedCount = 2;
+        loaded.appliedGameIds = ["deadlock"];
+        loaded.dirty = false;
+        loaded.verification = "matched";
+        return undefined;
+      }
+      return undefined;
+    });
+    const app = new Backend();
+    await app.initialize();
+    // The startup read proves the saved switch pending while the backend holds
+    // its operation guard; the write must wait for that guard to release.
+    await vi.waitFor(() =>
+      expect(
+        native.invoke.mock.calls.filter((call) => call[0] === "apply_rules"),
+      ).toHaveLength(1),
+    );
+    expect(app.status?.dirty).toBe(false);
+    await vi.waitFor(() => expect(app.busy).toBe(false));
+  });
   it("restores actual blocking with all saved switches off, without modifying preferences", async () => {
     const loaded = status();
     loaded.snapshot.games = [{ id: "deadlock", name: "Deadlock" }] as Game[];

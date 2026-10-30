@@ -129,10 +129,11 @@ export class Backend {
         // those effective paths before checking whether blocking is ready.
         if (windowsBlocking(this.status)) await this.reload();
       }
-      // Selections saved but not yet written are applied now rather than
-      // waiting for the next toggle.
-      void this.writeBlocks();
     }, false);
+    // Selections saved but not yet written are applied now rather than
+    // waiting for the next toggle. Run after the startup operation releases
+    // the guard, otherwise writeBlocks sees busy and silently does nothing.
+    void this.writeBlocks();
     if (this.status?.selfUpdateSupported) void this.checkForUpdates(true);
   }
 
