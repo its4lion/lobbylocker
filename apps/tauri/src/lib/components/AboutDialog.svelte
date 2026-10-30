@@ -71,6 +71,29 @@
       </Button>
     </div>
 
+    {#if app.updateVersion}<div
+        class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-muted/50 px-4 py-3 text-sm"
+      >
+        <span class="text-muted-foreground"
+          >{app.t("update_available", { version: app.updateVersion })}</span
+        >
+        <Button
+          size="sm"
+          disabled={app.busy || app.updateInstalling}
+          onclick={() => app.installUpdate()}
+          >{app.t(
+            app.updateInstalling ? "Installing update…" : "Install update",
+          )}</Button
+        >
+      </div>
+      {#if app.updateNotes}<p
+          class="text-xs whitespace-pre-line text-muted-foreground"
+          dir="auto"
+        >
+          {app.updateNotes}
+        </p>{/if}
+    {/if}
+
     <div
       class="flex items-center gap-3 rounded-lg bg-muted/50 px-4 py-3 text-sm"
     >

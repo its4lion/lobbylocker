@@ -412,6 +412,7 @@
           onmanage={manage}
           onselect={showGame}
           onabout={() => (aboutOpen = true)}
+          onupdate={() => (updatePromptOpen = true)}
         />
       </div>
     {/if}

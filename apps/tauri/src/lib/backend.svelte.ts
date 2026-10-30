@@ -39,7 +39,6 @@ export class Backend {
   updateInstalling = $state(false);
   updateError = $state("");
   updateChecked = $state(false);
-  updatePreview = $state(false);
   private availableUpdate: Update | null = null;
   private requests = new Requests(invoke);
   private iconPaths = "";
@@ -153,7 +152,6 @@ export class Backend {
 
   async checkForUpdates(silent = false) {
     if (
-      this.updatePreview ||
       !isTauri() ||
       !this.status?.selfUpdateSupported ||
       this.updateChecking ||
@@ -175,33 +173,8 @@ export class Backend {
     }
   }
 
-  toggleUpdatePreview() {
-    if (
-      !import.meta.env.DEV ||
-      this.busy ||
-      this.updateChecking ||
-      this.updateInstalling
-    )
-      return;
-    this.updatePreview = !this.updatePreview;
-    this.updateVersion = this.updatePreview
-      ? "0.0.2"
-      : (this.availableUpdate?.version ?? "");
-    this.updateNotes = this.updatePreview
-      ? "LOCAL PREVIEW — nothing will be installed."
-      : (this.availableUpdate?.body ?? "");
-    this.updateChecked = this.updatePreview || !!this.availableUpdate;
-    this.updateError = "";
-  }
-
   async installUpdate() {
-    if (
-      this.updatePreview ||
-      !this.availableUpdate ||
-      this.busy ||
-      this.updateInstalling
-    )
-      return;
+    if (!this.availableUpdate || this.busy || this.updateInstalling) return;
     this.busy = true;
     this.updateInstalling = true;
     this.updateError = "";

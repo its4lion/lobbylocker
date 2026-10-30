@@ -12,6 +12,7 @@
     onmanage,
     onselect,
     onabout,
+    onupdate,
   }: {
     app: Backend;
     version: string;
@@ -19,6 +20,7 @@
     onmanage: () => void;
     onselect: (id: string) => void;
     onabout: () => void;
+    onupdate: () => void;
   } = $props();
   let query = $state("");
   const games = $derived(app.games);
@@ -93,12 +95,21 @@
       >
     </div>
   {/if}
-  <button
-    type="button"
-    class="mt-4 flex w-full flex-col items-start gap-[3px] border-t p-3 text-start text-[11px] text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground"
-    onclick={onabout}
-  >
-    <span class="font-medium" dir="ltr">LobbyLocker v{version}</span>
-    <span>{app.t("Created by")} <b dir="ltr">its4lion</b></span>
-  </button>
+  <div class="mt-auto flex w-full flex-col gap-2 border-t p-3">
+    {#if app.updateVersion}
+      <button
+        type="button"
+        class="w-full rounded-sm py-1 text-start text-sm font-medium text-primary transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onclick={onupdate}
+        >{app.t("update_available", { version: app.updateVersion })}</button
+      >
+      <div class="w-full border-t" aria-hidden="true"></div>
+    {/if}
+    <button
+      type="button"
+      class="self-start rounded-sm text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      dir="ltr"
+      onclick={onabout}>LobbyLocker v{version}</button
+    >
+  </div>
 </aside>
