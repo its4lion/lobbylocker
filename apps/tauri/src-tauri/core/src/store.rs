@@ -174,7 +174,8 @@ impl Store {
             "cs2" => 0,
             "deadlock" => 1,
             "overwatch2" => 2,
-            _ => 3,
+            "dbd" => 3,
+            _ => 4,
         });
         let preferences = Preferences::from_json(
             &fs::read(self.directory.join("preferences.json")).map_err(|e| e.to_string())?,

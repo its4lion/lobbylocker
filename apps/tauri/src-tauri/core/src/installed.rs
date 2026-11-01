@@ -93,6 +93,7 @@ pub(crate) fn game_executable(game: &InstalledGame) -> Option<String> {
         "cs2" => &["game/bin/win64/cs2.exe"],
         "deadlock" => &["game/bin/win64/deadlock.exe"],
         "overwatch2" => OVERWATCH_EXECUTABLES,
+        "dbd" => &["DeadByDaylight/Binaries/Win64/DeadByDaylight-Win64-Shipping.exe"],
         _ => return None,
     };
     executable_in(&game.directory, candidates)
@@ -394,6 +395,7 @@ fn scan_steam_filtered(roots: &[PathBuf], excluded: &[PathBuf]) -> Scan {
                     "730" => "cs2".into(),
                     "1422450" => "deadlock".into(),
                     "2357570" => "overwatch2".into(),
+                    "381210" => "dbd".into(),
                     _ => format!("steam-{app_id}"),
                 };
                 Ok(Some(InstalledGame {

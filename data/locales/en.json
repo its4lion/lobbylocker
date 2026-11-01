@@ -175,6 +175,7 @@
     "Edit this server's addresses and ping target. Saving does not change firewall rules.": "Edit this server's addresses and ping target. Saving does not change firewall rules.",
     "Refresh cloud ranges": "Refresh cloud ranges",
     "Refresh official list": "Refresh official list",
+    "Refresh IPs": "Refresh IPs",
     "Server data information": "Server data information",
     "Basic": "Basic",
 

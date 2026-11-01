@@ -41,7 +41,7 @@ fn area(code: &str) -> &'static str {
 /// Games with an official upstream feed that `refresh` can update. Anything else
 /// needs a reviewed game file, so an automatic pass must leave it alone.
 pub fn has_official_feed(id: &str) -> bool {
-    matches!(id, "overwatch2" | "cs2" | "deadlock")
+    matches!(id, "overwatch2" | "cs2" | "deadlock" | "dbd")
 }
 
 /// Merge bundled defaults, preserving custom data and configured probes.
@@ -110,6 +110,9 @@ pub fn merge_defaults(game: &mut Game, defaults: Game) {
 pub fn refresh(game: &Game) -> Result<Game> {
     if game.id == "overwatch2" {
         return refresh_overwatch(game);
+    }
+    if game.id == "dbd" {
+        return refresh_dbd(game);
     }
     // Upstream URL is selected by trusted code, not user input (no arbitrary URL fetch / SSRF).
     let appid = match game.id.as_str() {
@@ -329,6 +332,120 @@ fn update_google_regions(game: &Game, body: &[u8]) -> Result<Game> {
     updated.source = Some(GOOGLE_CLOUD_URL.into());
     updated.updated_at = feed.creation_time;
     updated.note = "Community-maintained ranges; shared cloud ranges can affect other apps on Linux. Ping is an estimate; some servers may not reply.".into();
+    updated.validate()?;
+    Ok(updated)
+}
+
+const AWS_IP_RANGES_URL: &str = "https://ip-ranges.amazonaws.com/ip-ranges.json";
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AwsIpRangesFeed {
+    sync_token: Option<String>,
+    prefixes: Vec<AwsIpPrefix>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AwsIpPrefix {
+    ip_prefix: Option<String>,
+    region: String,
+    service: String,
+}
+
+fn refresh_dbd(game: &Game) -> Result<Game> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .https_only(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    let response = client
+        .get(AWS_IP_RANGES_URL)
+        .send()
+        .map_err(|e| e.to_string())?
+        .error_for_status()
+        .map_err(|e| e.to_string())?;
+    use std::io::Read;
+    let mut body = Vec::new();
+    response
+        .take(5_000_001)
+        .read_to_end(&mut body)
+        .map_err(|e| e.to_string())?;
+    if body.len() > 5_000_000 {
+        return Err("AWS IP ranges feed is too large.".into());
+    }
+    update_aws_regions(game, &body)
+}
+
+fn update_aws_regions(game: &Game, body: &[u8]) -> Result<Game> {
+    game.validate()?;
+    if body.len() > 5_000_000 {
+        return Err("AWS IP ranges feed is too large.".into());
+    }
+    let requested: BTreeSet<_> = game
+        .regions
+        .iter()
+        .filter_map(|r| r.provider_scope.as_deref())
+        .collect();
+    if requested.is_empty() {
+        return Err("No AWS region mappings configured. Add providerScope to a region in this game's JSON file.".into());
+    }
+    let feed: AwsIpRangesFeed =
+        serde_json::from_slice(body).map_err(|e| format!("Invalid AWS IP ranges feed: {e}"))?;
+    if feed.prefixes.len() > 50_000 {
+        return Err("AWS feed contains too many prefixes.".into());
+    }
+    let mut by_region: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for prefix in feed.prefixes {
+        if prefix.service != "EC2" {
+            continue;
+        }
+        let Some(address) = prefix.ip_prefix else {
+            continue;
+        };
+        if address.contains(':') {
+            continue;
+        }
+        if !requested.contains(prefix.region.as_str()) {
+            continue;
+        }
+        if !address.contains('/') {
+            continue;
+        }
+        let address = normalize_address(&address)?;
+        by_region.entry(prefix.region).or_default().insert(address);
+    }
+    for region in &requested {
+        if !by_region.contains_key(*region) || by_region[*region].is_empty() {
+            return Err(format!("AWS returned no EC2 ranges for configured region {region}. Your saved file was not changed."));
+        }
+    }
+    let mut updated = game.clone();
+    for region in &mut updated.regions {
+        let Some(scope) = &region.provider_scope else {
+            continue;
+        };
+        let custom: Vec<_> = region
+            .endpoints
+            .iter()
+            .filter(|e| e.custom)
+            .cloned()
+            .collect();
+        region.endpoints = by_region[scope]
+            .iter()
+            .enumerate()
+            .map(|(i, address)| Endpoint {
+                id: format!("{}-{i}", region.id),
+                address: address.clone(),
+                protocol: Protocol::Any,
+                ports: None,
+                custom: false,
+            })
+            .collect();
+        region.endpoints.extend(custom);
+    }
+    updated.source = Some(AWS_IP_RANGES_URL.into());
+    updated.updated_at = feed.sync_token;
+    updated.note = "AWS EC2 ranges by region; shared cloud ranges can affect other apps on Linux. us-east-1 stays available because DBD backend services depend on it. Ping is an estimate; some servers may not reply.".into();
     updated.validate()?;
     Ok(updated)
 }

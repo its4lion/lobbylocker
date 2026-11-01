@@ -150,6 +150,7 @@ pub fn installation_icon(directory: &Path, id: &str) -> Option<String> {
         "cs2" => Some("game/bin/win64/cs2.exe"),
         "deadlock" => Some("game/bin/win64/deadlock.exe"),
         "overwatch2" => Some("_retail_/Overwatch.exe"),
+        "dbd" => Some("DeadByDaylight/Binaries/Win64/DeadByDaylight-Win64-Shipping.exe"),
         _ => None,
     };
     if let Some(path) = known {

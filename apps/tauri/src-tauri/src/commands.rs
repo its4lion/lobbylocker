@@ -475,8 +475,16 @@ fn executable_selection(path: &str) -> Result<ExecutableSelection> {
     validate_executable(path)?;
     let path = installed::resolve_executable(path)?;
     let executable = std::path::Path::new(&path);
-    let game_id =
-        installed::is_battlenet_overwatch_executable(executable).then(|| "overwatch2".into());
+    let game_id = if installed::is_battlenet_overwatch_executable(executable) {
+        Some("overwatch2".into())
+    } else if executable
+        .file_name()
+        .is_some_and(|name| name.eq_ignore_ascii_case("DeadByDaylight-Win64-Shipping.exe"))
+    {
+        Some("dbd".into())
+    } else {
+        None
+    };
     let icon = lobbylocker_core::icons::executable_icon(executable);
     Ok(ExecutableSelection {
         path,

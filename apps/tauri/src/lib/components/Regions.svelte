@@ -24,7 +24,9 @@
 
 {#if app.game}
   {@const game = app.game}
-  {@const refreshable = ["overwatch2", "cs2", "deadlock"].includes(game.id)}
+  {@const refreshable = ["overwatch2", "cs2", "deadlock", "dbd"].includes(
+    game.id,
+  )}
   {@const hasTargets = game.regions.some((region) => region.endpoints.length)}
   {@const hiddenRanges = game.regions.filter(
     (region) => region.providerScope,
@@ -80,11 +82,7 @@
           disabled={app.busy}
           onclick={() => app.command("refresh_game", { gameId: game.id })}
           ><RefreshCw />{app.t(
-            !hasTargets
-              ? "Get server data"
-              : game.id === "overwatch2"
-                ? "Refresh cloud ranges"
-                : "Refresh official list",
+            !hasTargets ? "Get server data" : "Refresh IPs",
           )}</Button
         >{/if}
       {#if !compact}<Button

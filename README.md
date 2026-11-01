@@ -26,7 +26,7 @@
 > LobbyLocker is still in beta. Server addresses can change, Windows builds are
 > unsigned, and blocking a shared IP range can affect other applications.
 
-Supports **Overwatch 2**, **Deadlock**, and **Counter-Strike 2**, plus custom games.
+Supports **Dead by Daylight**, **Overwatch 2**, **Deadlock**, and **Counter-Strike 2**, plus custom games.
 
 <div align="center">
     <img
@@ -102,7 +102,7 @@ Blocks stay active after you close the app. Switch them off to unblock, or use
 | Question                         | Answer                                                                                                                                                                     |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Does it modify the game?         | No. It uses your OS firewall — no game files changed, no code injected.                                                                                                    |
-| A blocked region still connects? | Expand the app, then use **Refresh cloud ranges** (Overwatch) or **Refresh official list** (Deadlock/CS2). Toggle affected blocks off and back on, then queue a new match. |
+| A blocked region still connects? | Expand the app, then use **Refresh IPs**. Toggle affected blocks off and back on, then queue a new match. |
 | How do I uninstall?              | Use **Settings → Reset** (**Reset** in compact mode), wait for confirmation, then uninstall or delete the AppImage.                                                        |
 
 Need help or have a suggestion? [Open an issue](https://github.com/its4lion/LobbyLocker/issues).

@@ -7,7 +7,7 @@ import type {
   Status,
 } from "./types";
 
-const builtinGames = new Set(["cs2", "deadlock", "overwatch2"]);
+const builtinGames = new Set(["cs2", "deadlock", "overwatch2", "dbd"]);
 
 /** Sidebar membership is explicit. Blocking games stay accessible for recovery. */
 export function libraryGames(
