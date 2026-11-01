@@ -65,6 +65,7 @@
     },
     "windows": {
       "nsis": {
+        "installMode": "perMachine",
         "installerHooks": "windows/hooks.nsh"
       }
     }

@@ -280,6 +280,28 @@ pub fn helper_entry() -> Option<i32> {
     })
 }
 
+#[cfg(target_os = "windows")]
+/// Handle the uninstaller's cleanup argument before the Tauri runtime starts.
+/// Returns `None` for a normal launch so the desktop app still opens.
+pub fn helper_entry() -> Option<i32> {
+    let mut args = std::env::args().skip(1);
+    let arg = args.next()?;
+    if arg != "--reset-firewall" {
+        return None;
+    }
+    if args.next().is_some() {
+        eprintln!("Unexpected reset argument.");
+        return Some(1);
+    }
+    Some(match crate::windows_firewall::execute(&Request::Reset {}) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("{error}");
+            1
+        }
+    })
+}
+
 #[cfg(target_os = "linux")]
 fn owned_table_exists() -> Result<bool> {
     let tables = Command::new("/usr/bin/nft")

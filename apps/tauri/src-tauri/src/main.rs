@@ -33,7 +33,7 @@ fn data_path(app: &tauri::App, variable: &str, folder: &str) -> lobbylocker_core
 }
 
 fn main() {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     if let Some(code) = lobbylocker_core::firewall::helper_entry() {
         std::process::exit(code);
     }

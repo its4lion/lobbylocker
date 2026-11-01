@@ -25,6 +25,9 @@ fn native_packages_register_cleanup_before_removal() {
         bundle["windows"]["nsis"]["installerHooks"],
         "windows/hooks.nsh"
     );
+    // The uninstaller must be elevated so it can launch the admin-manifest app
+    // for firewall cleanup; a per-user uninstaller gets ERROR_ELEVATION_REQUIRED.
+    assert_eq!(bundle["windows"]["nsis"]["installMode"], "perMachine");
     for required in [
         "Operation = Remove",
         "Target = lobbylocker",

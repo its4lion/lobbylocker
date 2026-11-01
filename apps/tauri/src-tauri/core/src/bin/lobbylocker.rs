@@ -9,7 +9,7 @@ use lobbylocker_core::{
 use std::path::PathBuf;
 
 fn main() {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     if let Some(code) = firewall::helper_entry() {
         std::process::exit(code);
     }
