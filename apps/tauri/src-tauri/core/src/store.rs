@@ -14,6 +14,11 @@ pub struct Store {
     defaults: PathBuf,
 }
 
+/// Launcher-scoped ids that later gained a bundled game file. An upgraded
+/// profile keeps the old placeholder forever, which would hide the bundled
+/// data and keep asking the user for server addresses.
+const RENAMED_LAUNCHER_GAMES: &[(&str, &str)] = &[("steam-381210", "dbd")];
+
 /// Last background refresh per game, so opening a game page does not hit the
 /// official feed more than once a day. Only timestamps are stored here; the
 /// user's games stay in `games/`.
@@ -61,8 +66,12 @@ impl Store {
                     let game = Game::from_json(&fs::read(&path).map_err(|e| e.to_string())?)
                         .map_err(|e| format!("Invalid {}: {e}", path.display()))?;
                     game.validate()?;
-                    // Never overwrite a user's existing game file on app upgrades.
-                    if !store.game_path(&game.id)?.exists() {
+                    let target = store.game_path(&game.id)?;
+                    // Never replace a user's saved game. Only an empty
+                    // launcher-created placeholder is filled from defaults.
+                    if target.exists() {
+                        store.repair_empty_placeholder(&target, &game)?;
+                    } else {
                         store.save_game(&game)?;
                     }
                 }
@@ -71,7 +80,93 @@ impl Store {
         if !store.directory.join("preferences.json").exists() {
             store.save_preferences(&Preferences::default())?;
         }
+        // A failed repair must not stop the app from opening; the old entry
+        // simply remains until the next launch.
+        let _ = store.migrate_renamed_launcher_games();
         Ok(store)
+    }
+
+    /// A placeholder created by launcher discovery has no targets, so seeding
+    /// the bundled file cannot discard user input. Games with real targets are
+    /// never rewritten.
+    fn repair_empty_placeholder(&self, path: &Path, default: &Game) -> Result<()> {
+        let saved = Game::from_json(&fs::read(path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+        if !saved.regions.is_empty()
+            || saved.note != crate::installed::EMPTY_GAME_NOTE
+            || default.regions.is_empty()
+        {
+            return Ok(());
+        }
+        let mut game = default.clone();
+        game.executable_path = saved.executable_path;
+        self.save_game(&game)
+    }
+
+    /// Move an empty launcher placeholder to the bundled game that replaced it.
+    /// A placeholder with user-added targets is left untouched.
+    fn migrate_renamed_launcher_games(&self) -> Result<()> {
+        let preferences_path = self.directory.join("preferences.json");
+        let mut preferences =
+            Preferences::from_json(&fs::read(&preferences_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        let mut preferences_changed = false;
+        for &(old_id, new_id) in RENAMED_LAUNCHER_GAMES {
+            let old_path = self.game_path(old_id)?;
+            let new_path = self.game_path(new_id)?;
+            if !old_path.is_file() || !new_path.is_file() {
+                continue;
+            }
+            let old = Game::from_json(&fs::read(&old_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+            if old
+                .regions
+                .iter()
+                .any(|region| !region.endpoints.is_empty())
+            {
+                continue;
+            }
+            let mut builtin = Game::from_json(&fs::read(&new_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+            // Without bundled data there is nothing to move to.
+            if builtin.regions.is_empty() {
+                continue;
+            }
+            if builtin.executable_path.is_none() {
+                builtin.executable_path = old.executable_path;
+                builtin.validate()?;
+                self.save_game(&builtin)?;
+            }
+            if preferences.library_game_ids.iter().any(|id| id == old_id) {
+                preferences.library_game_ids = preferences
+                    .library_game_ids
+                    .iter()
+                    .map(|id| {
+                        if id == old_id {
+                            new_id.to_owned()
+                        } else {
+                            id.clone()
+                        }
+                    })
+                    .collect();
+                preferences.library_game_ids.sort();
+                preferences.library_game_ids.dedup();
+                preferences_changed = true;
+            }
+            // Keep the bytes for recovery without letting the empty twin load.
+            let mut archive = old_path.with_extension("json.migrated");
+            let mut suffix = 1;
+            while archive.exists() {
+                archive = old_path.with_extension(format!("json.migrated.{suffix}"));
+                suffix += 1;
+            }
+            fs::rename(&old_path, archive).map_err(|e| e.to_string())?;
+        }
+        if preferences_changed {
+            preferences.validate()?;
+            self.save_preferences(&preferences)?;
+        }
+        Ok(())
     }
 
     fn game_path(&self, id: &str) -> Result<PathBuf> {

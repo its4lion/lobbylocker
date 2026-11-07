@@ -295,6 +295,33 @@ fn steam_scans_external_libraries_and_maps_supported_and_custom_games() {
     assert!(scan.games.iter().any(|g| g.id == "steam-999"));
 }
 #[test]
+fn steam_maps_dead_by_daylight_and_finds_its_executable() {
+    let root = tempfile::tempdir().unwrap();
+    manifest(
+        root.path(),
+        "381210",
+        "Dead by Daylight",
+        "Dead by Daylight",
+        4,
+    );
+    let executable = root.path().join(
+        "steamapps/common/Dead by Daylight/DeadByDaylight/Binaries/Win64/DeadByDaylight-Win64-Shipping.exe",
+    );
+    fs::create_dir_all(executable.parent().unwrap()).unwrap();
+    fs::write(&executable, b"").unwrap();
+
+    let scan = scan_steam(&[root.path().into()]);
+    assert!(scan.warnings.is_empty());
+    let game = scan
+        .games
+        .iter()
+        .find(|game| game.id == "dbd")
+        .expect("Dead by Daylight must keep the bundled dbd id");
+    assert_eq!(game.name, "Dead by Daylight");
+    assert!(game_executable(game).is_some());
+}
+
+#[test]
 fn follows_multiple_library_drives_and_shows_duplicate_installs_once() {
     let root = tempfile::tempdir().unwrap();
     let second = tempfile::tempdir().unwrap();

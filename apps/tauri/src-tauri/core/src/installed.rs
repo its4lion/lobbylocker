@@ -147,11 +147,19 @@ pub fn is_launcher_tool(game: &InstalledGame) -> bool {
         || name == "steamvr"
 }
 
+/// Identifies a launcher-detected placeholder with no bundled server data.
+/// The store repairs these once a bundled file for the same id exists.
+pub(crate) const EMPTY_GAME_NOTE: &str = "User-configured game. Add server IPs in Advanced; installation metadata does not reveal server addresses. Windows uses the selected game executable; Linux rules apply system-wide.";
+
 pub fn empty_game(id: String, name: &str) -> Result<Game> {
     let game = Game {
-        schema_version: 1, id, name: name.trim().into(),
-        source: None, updated_at: None, executable_path: None,
-        note: "User-configured game. Add server IPs in Advanced; installation metadata does not reveal server addresses. Windows uses the selected game executable; Linux rules apply system-wide.".into(),
+        schema_version: 1,
+        id,
+        name: name.trim().into(),
+        source: None,
+        updated_at: None,
+        executable_path: None,
+        note: EMPTY_GAME_NOTE.into(),
         regions: vec![],
     };
     game.validate()?;
