@@ -5,6 +5,7 @@
 pub mod connections;
 pub mod dialogs;
 pub mod forms;
+mod icon_decode;
 pub mod icons;
 mod layout;
 mod library;
