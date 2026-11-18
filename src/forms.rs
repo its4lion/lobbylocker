@@ -458,7 +458,9 @@ fn delete_region(s: &mut AppState, game_id: &str, region_id: &str) {
         .retain(|key| key != &region_key(game_id, region_id));
     match s.engine.save_game(&game) {
         Ok(()) => {
-            let _ = s.engine.preferences(prefs);
+            if let Err(e) = s.engine.preferences(prefs) {
+                s.error = e;
+            }
             s.editing_region = None;
             s.error.clear();
             reload(s);

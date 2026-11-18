@@ -1576,16 +1576,3 @@ fn reset_confirmation_fits_in_compact_window() {
         description[0] >= dialog[0] && description[0] + description[2] <= dialog[0] + dialog[2]
     );
 }
-
-#[test]
-#[ignore]
-fn debug_file_row_height() {
-    let (mut rt, _config) = cs2_runtime();
-    rt.state.tab = Tab::Settings;
-    rt.invalidate();
-    for _ in 0..40 {
-        rt.frame(1.0 / 60.0);
-    }
-    println!("row rect: {:?}", rt.presented("row-Counter-Strike 2"));
-    println!("files section: {:?}", rt.presented("files-section"));
-}

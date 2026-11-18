@@ -128,24 +128,29 @@ pub struct Scan {
 }
 
 /// Steam ships these tools as installed apps, but they are not playable games.
-pub fn is_launcher_tool(game: &InstalledGame) -> bool {
-    if game.launcher != "Steam" {
+/// Whether a Steam entry is a launcher/runtime tool rather than a game.
+pub fn is_steam_tool(id: &str, name: &str) -> bool {
+    if !id.starts_with("steam-") {
         return false;
     }
-    let name = game.name.to_lowercase();
+    let lower = name.to_lowercase();
     matches!(
-        game.id.as_str(),
+        id,
         "steam-1493710"
             | "steam-1070560"
             | "steam-1391110"
             | "steam-1628350"
             | "steam-228980"
             | "steam-250820"
-    ) || name == "proton"
-        || name.starts_with("proton ")
-        || name.starts_with("steam linux runtime")
-        || name.starts_with("steamworks common redistributables")
-        || name == "steamvr"
+    ) || lower == "proton"
+        || lower.starts_with("proton ")
+        || lower.starts_with("steam linux runtime")
+        || lower.starts_with("steamworks common redistributables")
+        || lower == "steamvr"
+}
+
+pub fn is_launcher_tool(game: &InstalledGame) -> bool {
+    game.launcher == "Steam" && is_steam_tool(&game.id, &game.name)
 }
 
 /// Identifies a launcher-detected placeholder with no bundled server data.
@@ -445,14 +450,6 @@ fn finish(scan: &mut Scan) {
     scan.games.dedup_by(|a, b| a.id == b.id);
     scan.games.sort_by_key(|g| g.name.to_lowercase());
     scan.warnings.truncate(100);
-}
-
-pub fn scan() -> Scan {
-    scan_with_roots(&[])
-}
-
-pub fn scan_with_roots(extra_roots: &[PathBuf]) -> Scan {
-    scan_with_settings(extra_roots, &[])
 }
 
 pub fn normalized_library_path(path: &Path) -> PathBuf {

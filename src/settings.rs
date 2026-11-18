@@ -611,7 +611,7 @@ fn import_game(s: &mut AppState, path: &std::path::Path) {
         s.error = e;
         return;
     }
-    if s.status.snapshot.games.iter().any(|g| g.id == game.id) && !s.error_is_replace_ok() {
+    if s.status.snapshot.games.iter().any(|g| g.id == game.id) {
         s.error = "Replace the existing game file? Custom targets in that file will be replaced. Firewall rules are unchanged until Apply.".to_string();
         return;
     }
@@ -622,11 +622,5 @@ fn import_game(s: &mut AppState, path: &std::path::Path) {
             reload(s);
         }
         Err(e) => s.error = e,
-    }
-}
-
-impl AppState {
-    fn error_is_replace_ok(&self) -> bool {
-        false
     }
 }

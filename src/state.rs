@@ -100,6 +100,10 @@ fn exe_data_dirs(folder: &str) -> Vec<PathBuf> {
     .collect()
 }
 
+/// Window width (logical points) below which the app switches to the
+/// compact layout.
+pub const COMPACT_WIDTH_THRESHOLD: f32 = 720.0;
+
 pub struct AppState {
     pub engine: Arc<Engine>,
     pub locales: Catalogue,
@@ -326,7 +330,7 @@ pub fn set_compact(s: &mut AppState, tx: &mut rune::Tx, compact: bool) {
         return;
     }
     if compact {
-        if s.window_size.0 >= 720.0 {
+        if s.window_size.0 >= COMPACT_WIDTH_THRESHOLD {
             s.expanded_size = s.window_size;
         }
         enter_compact(s);
@@ -334,7 +338,7 @@ pub fn set_compact(s: &mut AppState, tx: &mut rune::Tx, compact: bool) {
         // compact width by hand.
         s.compact_auto = false;
     } else {
-        if s.window_size.0 < 720.0 {
+        if s.window_size.0 < COMPACT_WIDTH_THRESHOLD {
             s.compact_size = s.window_size;
         }
         s.compact = false;
@@ -373,17 +377,17 @@ pub fn observe_window_layout(s: &mut AppState, [_, _, width, height]: [f32; 4]) 
     s.window_size = (width, height);
     if s.compact {
         s.compact_size = (width, height);
-        if s.compact_auto && width >= 720.0 {
+        if s.compact_auto && width >= COMPACT_WIDTH_THRESHOLD {
             // The window is wide again: back to the expanded layout.
             exit_compact(s);
             s.expanded_size = (width, height);
             save_window_layout(s);
         }
-    } else if width < 720.0 && observed_before {
+    } else if width < COMPACT_WIDTH_THRESHOLD && observed_before {
         enter_compact(s);
         s.compact_size = (width, height);
         save_window_layout(s);
-    } else if width >= 720.0 {
+    } else if width >= COMPACT_WIDTH_THRESHOLD {
         s.expanded_size = (width, height);
     }
 }
@@ -660,44 +664,22 @@ pub fn block_game_ids(status: &EngineRuntime) -> Vec<String> {
     ids
 }
 
-pub fn library_games(status: &EngineRuntime) -> Vec<Game> {
-    let mut games = status.snapshot.games.clone();
-    games.sort_by(|a, b| {
+/// Sort key for library games: built-ins first, then by name, then id.
+fn library_sort_key(id: &str, name: &str) -> (usize, String, String) {
+    (
         BUILTIN_GAMES
             .iter()
-            .position(|id| *id == a.id)
-            .unwrap_or(BUILTIN_GAMES.len())
-            .cmp(
-                &BUILTIN_GAMES
-                    .iter()
-                    .position(|id| *id == b.id)
-                    .unwrap_or(BUILTIN_GAMES.len()),
-            )
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-            .then_with(|| a.id.cmp(&b.id))
-    });
-    games
+            .position(|g| *g == id)
+            .unwrap_or(BUILTIN_GAMES.len()),
+        name.to_lowercase(),
+        id.to_string(),
+    )
 }
 
-fn is_steam_tool(id: &str, name: &str) -> bool {
-    if !id.starts_with("steam-") {
-        return false;
-    }
-    let lower = name.to_lowercase();
-    [
-        "steam-1493710",
-        "steam-1070560",
-        "steam-1391110",
-        "steam-1628350",
-        "steam-228980",
-        "steam-250820",
-    ]
-    .contains(&id)
-        || lower == "proton"
-        || lower.starts_with("proton ")
-        || lower.starts_with("steam linux runtime")
-        || lower.starts_with("steamworks common redistributables")
-        || lower == "steamvr"
+pub fn library_games(status: &EngineRuntime) -> Vec<Game> {
+    let mut games = status.snapshot.games.clone();
+    games.sort_by_key(|g| library_sort_key(&g.id, &g.name));
+    games
 }
 
 pub struct LibraryCandidate {
@@ -710,7 +692,7 @@ pub fn library_candidates(s: &AppState) -> Vec<LibraryCandidate> {
     let forced = block_game_ids(status);
     let mut choices: BTreeMap<String, LibraryCandidate> = BTreeMap::new();
     for game in &status.snapshot.games {
-        if is_steam_tool(&game.id, &game.name) && !forced.contains(&game.id) {
+        if installed::is_steam_tool(&game.id, &game.name) && !forced.contains(&game.id) {
             continue;
         }
         let launcher_game = BUILTIN_GAMES.contains(&game.id.as_str())
@@ -740,20 +722,7 @@ pub fn library_candidates(s: &AppState) -> Vec<LibraryCandidate> {
         }
     }
     let mut list: Vec<LibraryCandidate> = choices.into_values().collect();
-    list.sort_by(|a, b| {
-        BUILTIN_GAMES
-            .iter()
-            .position(|id| *id == a.id)
-            .unwrap_or(BUILTIN_GAMES.len())
-            .cmp(
-                &BUILTIN_GAMES
-                    .iter()
-                    .position(|id| *id == b.id)
-                    .unwrap_or(BUILTIN_GAMES.len()),
-            )
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-            .then_with(|| a.id.cmp(&b.id))
-    });
+    list.sort_by_key(|c| library_sort_key(&c.id, &c.name));
     list
 }
 
@@ -893,21 +862,6 @@ pub fn executable_blocking(status: &EngineRuntime) -> bool {
         && status.snapshot.preferences.windows_blocking_scope == FirewallScope::Executable
 }
 
-pub fn verification_issue_message(issue: Option<&str>) -> Option<&'static str> {
-    match issue {
-        Some("managedByDeviceManagement") => Some(
-            "Your organization manages this device. LobbyLocker cannot confirm that its blocks are active.",
-        ),
-        Some("firewallUnavailable") => Some(
-            "Windows Firewall is turned off, or a policy is blocking local firewall rules. Turn the firewall on and try again.",
-        ),
-        Some("unsupportedFilters") => Some(
-            "LobbyLocker found firewall rules it cannot verify. Reset and apply again to replace them.",
-        ),
-        _ => None,
-    }
-}
-
 pub fn scope_warning(status: &EngineRuntime) -> &'static str {
     if executable_blocking(status) {
         "Applies only to each selected game executable on Windows. Rules remain active after closing LobbyLocker."
@@ -955,14 +909,6 @@ pub fn verification_issue_retryable(issue: Option<&str>) -> bool {
 
 // ---------- Ping helpers (ported from lib/ping.ts) ----------
 
-pub fn ping_regions(game: &Game, region_id: Option<&str>) -> Vec<Region> {
-    game.regions
-        .iter()
-        .filter(|r| r.probe_target.is_some() && region_id.is_none_or(|id| r.id == id))
-        .cloned()
-        .collect()
-}
-
 pub fn ping_description(sample: &lobbylocker_core::latency::PingSample) -> String {
     match sample.latency_ms {
         Some(ms) => format!("{} ms", ms.round()),
@@ -990,30 +936,6 @@ pub fn action_bar(status: &EngineRuntime) -> ActionBar {
         apply: status.dirty,
         count,
     }
-}
-
-pub fn apply_review(status: &EngineRuntime) -> (Vec<String>, usize) {
-    let selected: std::collections::HashSet<String> = status
-        .snapshot
-        .preferences
-        .blocked_regions
-        .iter()
-        .cloned()
-        .collect();
-    let mut games = Vec::new();
-    let mut regions = 0;
-    for game in &status.snapshot.games {
-        let count = game
-            .regions
-            .iter()
-            .filter(|r| !r.endpoints.is_empty() && selected.contains(&region_key(&game.id, &r.id)))
-            .count();
-        if count > 0 {
-            games.push(game.name.clone());
-            regions += count;
-        }
-    }
-    (games, regions)
 }
 
 // ---------- Backend operations ----------
@@ -1115,7 +1037,9 @@ pub fn write_blocks(s: &mut AppState, rollback: Option<Preferences>) {
 
 fn rollback_if_failed(s: &mut AppState) {
     if let Some(prefs) = s.pending_rollback.take() {
-        let _ = s.engine.preferences(prefs);
+        if let Err(e) = s.engine.preferences(prefs) {
+            s.error = e;
+        }
         reload(s);
     }
 }
