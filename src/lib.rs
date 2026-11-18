@@ -7,6 +7,7 @@ pub mod dialogs;
 pub mod forms;
 pub mod icons;
 mod layout;
+mod library;
 pub mod regions;
 pub mod settings;
 pub mod sidebar;
