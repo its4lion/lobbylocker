@@ -43,12 +43,7 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
         })
         .build(k)
         .key("scan-games");
-    let search_row = row().w_full().center_y().gap(4.0);
-    let search_row = if t.direction() == "rtl" {
-        search_row.child(scan).child(search)
-    } else {
-        search_row.child(search).child(scan)
-    };
+    let search_row = row().w_full().center_y().gap(4.0).child(search).child(scan);
 
     let mut sidebar = Sidebar::new()
         .label(t.text("Games"))
@@ -80,15 +75,17 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
         for game in &visible {
             let active = game.id == s.selected;
             let id = game.id.clone();
-            let subtitle = match game_block_state(&game.id, &s.status) {
-                Some("blocked") => "Blocked",
-                Some("none") => "Not blocked",
-                _ => "Status unavailable",
+            // Only a blocked game carries a status line; an unblocked one
+            // shows its name alone.
+            let subtitle = (game_block_state(&game.id, &s.status) == Some("blocked"))
+                .then(|| t.text("Blocked").to_string());
+            let label = match &subtitle {
+                Some(subtitle) => format!("{}, {}", game.name, subtitle),
+                None => game.name.clone(),
             };
-            let subtitle = t.text(subtitle).to_string();
             let mut item = row()
                 .key(format!("game-{}", game.id))
-                .label(format!("{}, {}", game.name, subtitle))
+                .label(label)
                 .w_full()
                 .h(48.0)
                 .px(8.0)
@@ -112,14 +109,14 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
                                 .truncate()
                                 .a11y_hidden(),
                         )
-                        .child(
+                        .children(subtitle.map(|subtitle| {
                             text(subtitle)
                                 .key(format!("game-status-{}", game.id))
                                 .font(k.ty.caption())
                                 .color(k.c.text_faint)
                                 .truncate()
-                                .a11y_hidden(),
-                        ),
+                                .a11y_hidden()
+                        })),
                 );
             item = k.interactive(item);
             if active {
@@ -132,15 +129,7 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
         }
     }
 
-    let align = |content: El| {
-        let line = row().w_full();
-        let line = if t.direction() == "rtl" {
-            line.justify_end()
-        } else {
-            line
-        };
-        line.child(content)
-    };
+    let align = |content: El| row().w_full().child(content);
     let version = text(format!("LobbyLocker v{}", env!("CARGO_PKG_VERSION")))
         .key("sidebar-version")
         .font(k.ty.caption())
@@ -151,7 +140,7 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
         .as_ref()
         .is_some_and(|notice| notice.available);
     // The row sizes to its content, so the footer can align it to the
-    // leading edge of the locale.
+    // leading edge.
     let mut version_row = row().gap(6.0).center_y().child(version);
     if update_ready {
         version_row = version_row.child(

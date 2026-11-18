@@ -165,9 +165,15 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             }
         }
     }
-    rune_kit::root(split, overlays).on_layout(|state: &mut AppState, rect| {
-        observe_window_layout(state, rect);
-    })
+    // Every locale lays out left to right; the language only changes the text.
+    // Setting it at the root also forces each empty field's placeholder to
+    // paint from the left edge (Rune anchors an auto-detected RTL placeholder
+    // past the field's left edge, which would clip it out of the box).
+    rune_kit::root(split, overlays)
+        .dir(rune::Direction::Ltr)
+        .on_layout(|state: &mut AppState, rect| {
+            observe_window_layout(state, rect);
+        })
 }
 
 fn header_controls(
@@ -261,7 +267,6 @@ fn compact_game_picker(
     layer: &mut Vec<El>,
 ) -> El {
     let games = library_candidates(s);
-    let rtl = t.direction() == "rtl";
     let disabled = games.is_empty() || s.busy.is_some();
     let selected = games.iter().find(|game| game.id == s.selected);
     let name = |game: &LibraryCandidate| {
@@ -288,11 +293,7 @@ fn compact_game_picker(
         let artwork = crate::sidebar::game_icon(s, game, k, 24.0)
             .key(format!("compact-selected-icon-{}", game.id))
             .a11y_hidden();
-        value = if rtl {
-            value.child(label).child(artwork)
-        } else {
-            value.child(artwork).child(label)
-        };
+        value = value.child(artwork).child(label);
     } else {
         value = value.child(label);
     }
@@ -324,11 +325,7 @@ fn compact_game_picker(
         .radius(k.radius.md)
         .fill(k.c.layer_01)
         .hover(k.c.hover);
-    let trigger = if rtl {
-        trigger.child(chevron).child(value)
-    } else {
-        trigger.child(value).child(chevron)
-    };
+    let trigger = trigger.child(value).child(chevron);
     let picker = if disabled {
         trigger.layer_opacity(0.5)
     } else {
@@ -372,11 +369,7 @@ fn compact_game_picker(
                 .gap(8.0)
                 .center_y()
                 .radius(4.0);
-            let option = if rtl {
-                option.child(mark).child(label).child(artwork)
-            } else {
-                option.child(artwork).child(label).child(mark)
-            };
+            let option = option.child(artwork).child(label).child(mark);
             rows = rows.child(option.on_press(move |state: &mut AppState| {
                 state.compact_game_open = false;
                 crate::sidebar::select_game(state, &id);
@@ -427,11 +420,7 @@ fn compact_game_picker(
             .anchored_fit(
                 "compact-game-trigger",
                 rune::Side::Bottom,
-                if rtl {
-                    rune::Align::End
-                } else {
-                    rune::Align::Start
-                },
+                rune::Align::Start,
                 2.0,
             )
             .instant_changes()
@@ -461,11 +450,7 @@ fn compact_game_picker(
         .pt(12.0)
         .gap(8.0)
         .center_y();
-    if t.direction() == "rtl" {
-        picker_row.child(scan).child(picker)
-    } else {
-        picker_row.child(picker).child(scan)
-    }
+    picker_row.child(picker).child(scan)
 }
 
 fn footer(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translator) -> El {
@@ -551,11 +536,7 @@ fn footer(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translator) -> El {
             .justify_between()
             .gap(8.0);
         footer
-            .child(if t.direction() == "rtl" {
-                actions.child(version).child(reset)
-            } else {
-                actions.child(reset).child(version)
-            })
+            .child(actions.child(reset).child(version))
             // The sidebar is hidden in the compact layout, so the update marker
             // and the way out live here instead.
             .child(compact_release_row(s, k, t))
@@ -600,19 +581,11 @@ fn compact_release_row(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Transl
         .gap(8.0)
         .center_y()
         .justify_between();
-    if t.direction() == "rtl" {
-        let mut row = row.child(quit);
-        if let Some(update) = update {
-            row = row.child(update);
-        }
-        row
-    } else {
-        let row = match update {
-            Some(update) => row.child(update),
-            None => row,
-        };
-        row.child(quit)
-    }
+    let row = match update {
+        Some(update) => row.child(update),
+        None => row,
+    };
+    row.child(quit)
 }
 
 fn footer_message(s: &AppState, t: &lobbylocker_core::i18n::Translator) -> String {

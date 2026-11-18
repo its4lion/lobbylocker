@@ -1,4 +1,4 @@
-//! Data-driven JSON locales with an English fallback and locale-provided LTR/RTL direction.
+//! Data-driven JSON locales with an English fallback.
 use crate::{model::validate_id, Result};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, fs, path::Path, sync::Arc};
@@ -11,8 +11,6 @@ pub struct Locale {
     pub code: String,
     /// Native language name displayed in the language selector.
     pub name: String,
-    /// Either `ltr` or `rtl`.
-    pub direction: String,
     /// Message IDs map to translated labels or templates.
     pub messages: BTreeMap<String, String>,
 }
@@ -36,10 +34,6 @@ impl Translator {
     /// The actual selected language tag, after fallback.
     pub fn code(&self) -> &str {
         &self.locale.code
-    }
-    /// Reading direction defined in the locale file.
-    pub fn direction(&self) -> &str {
-        &self.locale.direction
     }
     /// Substitutes named placeholders without interpreting markup or nested placeholders.
     pub fn format(&self, key: &str, variables: &[(&str, &str)]) -> String {
@@ -79,12 +73,8 @@ pub struct Catalogue {
 fn parse(input: &str) -> Result<Locale> {
     let locale: Locale = serde_json::from_str(input).map_err(|e| e.to_string())?;
     validate_id(&locale.code)?;
-    if locale.name.trim().is_empty()
-        || locale.name.len() > 120
-        || !matches!(locale.direction.as_str(), "ltr" | "rtl")
-        || locale.messages.len() > 3000
-    {
-        return Err("Invalid locale name, direction, or message count.".into());
+    if locale.name.trim().is_empty() || locale.name.len() > 120 || locale.messages.len() > 3000 {
+        return Err("Invalid locale name or message count.".into());
     }
     Ok(locale)
 }

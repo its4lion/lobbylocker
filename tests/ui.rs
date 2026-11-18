@@ -1110,6 +1110,12 @@ fn sidebar_game_artwork_is_centered_next_to_both_text_lines() {
     let pixels = rune::Pixels::new();
     pixels.set(4, 4, vec![255; 4 * 4 * 4]);
     rt.state.custom_icons.insert("cs2".to_string(), pixels);
+    // Only a blocked game shows the status line this test centers against.
+    rt.state.status.applied_count = Some(1);
+    rt.state.status.region_states.insert(
+        "cs2:Europe".to_string(),
+        lobbylocker_core::inspection::RegionState::Blocked,
+    );
     rt.frame(0.0);
 
     let (item, _) = rt.presented("game-cs2").expect("game row");
@@ -1194,7 +1200,9 @@ fn regions_page_scrolls_when_content_overflows() {
         .find(|r| r.area == "Europe")
         .cloned()
         .expect("Europe region");
-    for i in 0..20 {
+    // Enough regions to overflow the viewport: a card only grows a status
+    // line when its region is blocked, so unblocked cards are short.
+    for i in 0..40 {
         let mut region = base.clone();
         region.id = format!("scroll-test-{i}");
         region.name = format!("Scroll Test {i}");
@@ -1471,7 +1479,7 @@ fn settings_does_not_duplicate_the_sidebar_footer() {
 }
 
 #[test]
-fn sidebar_footer_follows_locale_direction() {
+fn sidebar_footer_stays_left_to_right_in_every_language() {
     for (size, language) in [((720.0, 560.0), "en"), ((360.0, 560.0), "ar")] {
         let (mut rt, _config) = cs2_runtime_at(size);
         rt.state.status.snapshot.preferences.language = language.to_string();
@@ -1480,11 +1488,10 @@ fn sidebar_footer_follows_locale_direction() {
         let (version, _) = rt.presented("sidebar-version").expect("version");
         assert!(rt.find("about").is_none());
         assert!(rt.find("manage-games").is_none());
-        if language == "ar" {
-            assert!((version[0] + version[2] - footer[0] - footer[2] + 8.0).abs() < 1.0);
-        } else {
-            assert!((version[0] - footer[0] - 8.0).abs() < 1.0);
-        }
+        assert!(
+            (version[0] - footer[0] - 8.0).abs() < 1.0,
+            "{language}: version sits at the leading edge: {version:?} in {footer:?}"
+        );
         assert!(version[0] >= footer[0] && version[0] + version[2] <= footer[0] + footer[2]);
     }
 }

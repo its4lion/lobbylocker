@@ -29,19 +29,19 @@ pub fn connections_page(s: &AppState, _cx: &mut Cx<AppState>, k: &Kit, t: &Trans
         .build(k)
         .key("connections-scan");
 
-    let rtl = t.direction() == "rtl";
     let title = text(t.text("Connections"))
         .key("connections-title")
         .font(rune::TextStyle::new(20.0, 600.0))
         .color(k.c.text_base)
         .grow(1.0)
         .shrink();
-    let heading_row = row().w_full().gap(12.0).center_y().justify_between();
-    let heading_row = if rtl {
-        heading_row.child(scan).child(title)
-    } else {
-        heading_row.child(title).child(scan)
-    };
+    let heading_row = row()
+        .w_full()
+        .gap(12.0)
+        .center_y()
+        .justify_between()
+        .child(title)
+        .child(scan);
     let heading = col().w_full().gap(6.0).child(heading_row).child(
         text(t.text("A snapshot of remote connections. Scan to refresh."))
             .font(rune::tok::type_::BODY)
@@ -88,11 +88,7 @@ pub fn connections_page(s: &AppState, _cx: &mut Cx<AppState>, k: &Kit, t: &Trans
     let all = filter_button(s, k, t, ConnectionFilter::All, "All", "all");
     let tcp = filter_button(s, k, t, ConnectionFilter::Tcp, "TCP", "tcp");
     let udp = filter_button(s, k, t, ConnectionFilter::Udp, "UDP", "udp");
-    let filters = if rtl {
-        filters.justify_end().child(udp).child(tcp).child(all)
-    } else {
-        filters.child(all).child(tcp).child(udp)
-    };
+    let filters = filters.child(all).child(tcp).child(udp);
 
     let mut page = col()
         .key("connections-page")

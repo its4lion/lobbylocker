@@ -608,10 +608,13 @@ pub fn verification_issue_retryable(issue: Option<&str>) -> bool {
 
 // ---------- Ping helpers (ported from lib/ping.ts) ----------
 
-pub fn ping_description(sample: &lobbylocker_core::latency::PingSample) -> String {
+pub fn ping_description(
+    sample: &lobbylocker_core::latency::PingSample,
+    t: &lobbylocker_core::i18n::Translator,
+) -> String {
     match sample.latency_ms {
         Some(ms) => format!("{} ms", ms.round()),
-        None => "No reply".to_string(),
+        None => t.text("No reply").to_string(),
     }
 }
 

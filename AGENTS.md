@@ -126,8 +126,10 @@ i18n:
 - `en.json` and `ar.json` are **compiled into the binary** via `include_str!`
   *and* re-read from the locales dir at runtime; a same-code file in the dir wins.
   A locale's filename must equal its `code`.
-- The locale file declares `direction: "ltr" | "rtl"`; the UI reads it from
-  the selected locale metadata — do not hardcode LTR.
+- The UI lays out left to right in **every** locale — a locale only changes
+  the text. The root sets `El::dir(Direction::Ltr)`, which also keeps each
+  empty field's placeholder painted from the left edge; do not reintroduce
+  per-locale RTL layout branches.
 - Adding a UI string means adding the key to `data/locales/en.json`
   (and `ar.json` if localized); a new `<code>.json` needs an app restart to appear.
 
