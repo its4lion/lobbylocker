@@ -6,6 +6,7 @@ pub mod connections;
 pub mod dialogs;
 pub mod forms;
 pub mod icons;
+mod layout;
 pub mod regions;
 pub mod settings;
 pub mod sidebar;
