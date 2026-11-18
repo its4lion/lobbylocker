@@ -436,64 +436,14 @@ pub fn poll(s: &mut AppState, _t: f64, tx: &mut rune::Tx) -> bool {
         && !rune::is_headless()
     {
         let game_id = s.selected.clone();
-        s.banner_latest.request_if_changed(&game_id, load_banner);
+        s.banner_latest
+            .request_if_changed(&game_id, crate::banner_decode::load_banner);
     }
     if changed {
         refresh_icons(s);
         tx.instant();
     }
     changed
-}
-
-/// Banner bytes from the user's own machine: the art they installed, then
-/// Steam's cached art. Decoded and scaled down to a texture the window can
-/// hold.
-fn load_banner(game_id: String) -> BannerDone {
-    let mut fallback: Option<(u32, u32, Vec<u8>)> = None;
-    for path in banners::banner_paths(&game_id) {
-        let Ok(bytes) = banners::read_banner(&path) else {
-            continue;
-        };
-        let Ok(decoded) = decode_banner(&bytes) else {
-            continue;
-        };
-        let (width, height, _) = &decoded;
-        // A banner is wide; a tall poster is only used when nothing else fits.
-        if *width as f32 >= *height as f32 * 1.4 {
-            return BannerDone {
-                game_id,
-                pixels: Some(decoded),
-            };
-        }
-        if fallback.is_none() {
-            fallback = Some(decoded);
-        }
-    }
-    BannerDone {
-        game_id,
-        pixels: fallback,
-    }
-}
-
-/// Decode banner bytes into raw RGBA, scaled down to a texture the window can
-/// hold. Returns width, height, and the pixel bytes.
-pub fn decode_banner(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
-    use image::{ImageReader, Limits};
-    let mut reader = ImageReader::new(std::io::Cursor::new(bytes))
-        .with_guessed_format()
-        .map_err(|e| e.to_string())?;
-    let mut limits = Limits::default();
-    limits.max_image_width = Some(4096);
-    limits.max_image_height = Some(4096);
-    limits.max_alloc = Some(64_000_000);
-    reader.limits(limits);
-    let image = reader.decode().map_err(|e| e.to_string())?;
-    // The banner is drawn a few hundred points wide; a smaller texture is
-    // enough and keeps the window's memory flat.
-    let image = image.thumbnail(1600, 1600);
-    let rgba = image.to_rgba8();
-    let (width, height) = (rgba.width(), rgba.height());
-    Ok((width, height, rgba.into_raw()))
 }
 
 // ---------- Library helpers (ported from lib/game.ts) ----------
@@ -808,3 +758,6 @@ pub use crate::library::*;
 
 // Re-exported so existing `crate::state::*` imports keep working.
 pub use crate::icon_decode::refresh_icons;
+
+// Re-exported for tests/callers.
+pub use crate::banner_decode::decode_banner;

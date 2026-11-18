@@ -2,6 +2,7 @@
 //! The binary in `src/main.rs` is a thin entry point; tests build views
 //! against this library headlessly.
 
+mod banner_decode;
 pub mod connections;
 pub mod dialogs;
 pub mod forms;
