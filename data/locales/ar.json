@@ -22,6 +22,8 @@
     "Add a custom address to this region.": "أضف عنوانًا مخصصًا إلى هذه المنطقة.",
     "Collapse server": "طي الخادم",
     "Expand server": "توسيع الخادم",
+    "Status unavailable": "الحالة غير متاحة",
+    "Not blocked": "غير محظور",
     "Reading firewall… Administrator access may be requested. No rules will be changed.": "جارٍ قراءة جدار الحماية… قد تُطلب صلاحيات المسؤول. لن تتغير أي قواعد.",
     "Could not read firewall status. Existing blocks have not been changed by this check.": "تعذرت قراءة حالة جدار الحماية. لم يُغيّر هذا الفحص الحظر الموجود.",
     "Could not read firewall status.": "تعذرت قراءة حالة جدار الحماية.",
@@ -35,6 +37,7 @@
     "Loading firewall status. No rules are changed automatically.": "جارٍ تحميل حالة جدار الحماية. لا تتغير أي قواعد تلقائيًا.",
     "Saved selections match active LobbyLocker rules.": "الاختيارات المحفوظة تطابق قواعد LobbyLocker النشطة.",
     "Selection saved.": "تم حفظ الاختيار.",
+    "No targets configured": "لم تُحدَّد أي عناوين",
     "Add your first server IP. Saving selections does not change existing firewall rules; use Apply when ready.": "أضف عنوان خادمك الأول. حفظ الاختيارات لا يُغيّر قواعد جدار الحماية الموجودة؛ استخدم التطبيق عندما تكون مستعدًا.",
     "Apply will filter only this exact executable. Launchers and child executables are not automatically included. Changing the path takes effect after Apply; the file is never launched.": "سيشمل التطبيق هذا الملف التنفيذي وحده. لا يشمل برامج التشغيل والملفات الفرعية تلقائيًا. يسري تغيير المسار بعد التطبيق؛ لا يُشغَّل الملف مطلقًا.",
     "Firewall updated and read back successfully. Rules remain active when the app is closed.": "تم تحديث جدار الحماية والتحقق من قواعده بنجاح. تبقى القواعد نشطة بعد إغلاق التطبيق.",
@@ -272,7 +275,7 @@
     "Refresh IPs": "تحديث عناوين IP",
     "Detected automatically": "تم اكتشافه تلقائياً",
     "No library folders found": "لم يتم العثور على مجلدات مكتبات",
-    "Quit LobbyLocker": "إنهاء LobbyLocker",
+    "Quit LobbyLocker": "اغلاق التطبيبق",
     "Update": "تحديث",
     "Open folder": "فتح المجلد"
   }

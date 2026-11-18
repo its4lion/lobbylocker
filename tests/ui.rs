@@ -1200,9 +1200,7 @@ fn regions_page_scrolls_when_content_overflows() {
         .find(|r| r.area == "Europe")
         .cloned()
         .expect("Europe region");
-    // Enough regions to overflow the viewport: a card only grows a status
-    // line when its region is blocked, so unblocked cards are short.
-    for i in 0..40 {
+    for i in 0..20 {
         let mut region = base.clone();
         region.id = format!("scroll-test-{i}");
         region.name = format!("Scroll Test {i}");
@@ -1558,5 +1556,56 @@ fn reset_confirmation_fits_in_compact_window() {
     assert!(dialog[0] >= 0.0 && dialog[0] + dialog[2] <= 360.0);
     assert!(
         description[0] >= dialog[0] && description[0] + description[2] <= dialog[0] + dialog[2]
+    );
+}
+
+/// Long region names (from the refreshed list) must ellipsize inside a
+/// minimum-width card instead of pushing the switch out past the border.
+#[test]
+fn server_card_switch_stays_inside_the_card_with_long_names() {
+    let (mut rt, _config) = cs2_runtime_at((784.0, 860.0));
+    let game = rt
+        .state
+        .status
+        .snapshot
+        .games
+        .iter_mut()
+        .find(|g| g.id == "cs2")
+        .unwrap();
+    for region in game.regions.iter_mut() {
+        region.name = format!("Datapacket {} (Germany)", region.name);
+    }
+    rt.frame(0.0);
+    let els = rt.elements();
+    let mut checked = 0;
+    for e in &els {
+        let Some(key) = e.key.as_deref() else {
+            continue;
+        };
+        if !key.starts_with("server-") {
+            continue;
+        }
+        let card = e.rect;
+        for s in &els {
+            if s.key.as_deref() != Some("control") {
+                continue;
+            }
+            let r = s.rect;
+            let cy = r[1] + r[3] / 2.0;
+            if cy < card[1] || cy > card[1] + card[3] || r[0] < card[0] || r[0] > card[0] + card[2]
+            {
+                continue;
+            }
+            checked += 1;
+            let past = r[0] + r[2] - (card[0] + card[2]);
+            assert!(
+                past <= -11.5,
+                "{key}: switch extends {past:.1} past the card border (card {card:?}, switch {r:?})"
+            );
+        }
+    }
+    assert!(
+        checked >= 8,
+        "expected switches in the presented cards, got {checked}"
     );
 }

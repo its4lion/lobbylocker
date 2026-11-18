@@ -409,19 +409,23 @@ pub fn toggle_region(s: &mut AppState, game_id: &str, region_id: &str) {
     }
 }
 
-/// The ported readback's label: only a blocked (or partially blocked) region
-/// gets a status line — anything else shows none.
+/// The ported readback's label for a server card ("Blocked" / "Not blocked"
+/// / edge cases), from the locale. Server cards always carry it; the sidebar
+/// only shows a line when the game is blocked.
 fn block_description(
     s: &AppState,
     game: &Game,
     region: &lobbylocker_core::model::Region,
     t: &lobbylocker_core::i18n::Translator,
-) -> Option<String> {
-    if region.endpoints.is_empty()
-        || s.status.applied_count.is_none()
-        || s.status.applied_count == Some(0)
-    {
-        return None;
+) -> String {
+    if region.endpoints.is_empty() {
+        return t.text("No targets configured").to_string();
+    }
+    if s.status.applied_count.is_none() {
+        return t.text("Status unavailable").to_string();
+    }
+    if s.status.applied_count == Some(0) {
+        return t.text("Not blocked").to_string();
     }
     match s
         .status
@@ -431,8 +435,9 @@ fn block_description(
         Some(
             lobbylocker_core::inspection::RegionState::Blocked
             | lobbylocker_core::inspection::RegionState::Partial,
-        ) => Some(t.text("Blocked").to_string()),
-        _ => None,
+        ) => t.text("Blocked").to_string(),
+        Some(lobbylocker_core::inspection::RegionState::None) => t.text("Not blocked").to_string(),
+        _ => t.text("Status unavailable").to_string(),
     }
 }
 
@@ -460,36 +465,32 @@ fn server_card(
         .border(1.0, k.c.border_muted);
     let sample = s.status.samples.get(&region_key(&game.id, &region.id));
     let state_text = block_description(s, game, region, t);
-    let mut info = col().grow(1.0).min_h(0.0).gap(2.0).child(
+    // min_w(0) lets the column shrink below the name's intrinsic width so
+    // truncate() ellipsizes instead of pushing the switch out of the card.
+    let mut info = col().grow(1.0).min_w(0.0).min_h(0.0).gap(2.0).child(
         text(region.name.clone())
             .font(TextStyle::new(13.0, 500.0))
             .color(k.c.text_base)
             .truncate(),
     );
-    // The status line (only a blocked region has one) and the ping result
-    // share a row; an unblocked, unpinged card shows just its name.
-    if state_text.is_some() || sample.is_some() {
-        let mut sub = row().gap(8.0).center_y();
-        if let Some(state_text) = state_text {
-            sub = sub.child(
-                text(state_text)
-                    .font(rune::tok::type_::LABEL)
-                    .color(k.c.text_muted),
-            );
-        }
-        if let Some(sample) = sample {
-            sub = sub.child(
-                text(ping_description(sample, t))
-                    .font(rune::tok::type_::LABEL)
-                    .color(if sample.latency_ms.is_some() {
-                        k.c.text_base
-                    } else {
-                        k.c.text_muted
-                    }),
-            );
-        }
-        info = info.child(sub);
+    // The status label and the ping result share a row under the name.
+    let mut sub = row().gap(8.0).center_y().child(
+        text(state_text)
+            .font(rune::tok::type_::LABEL)
+            .color(k.c.text_muted),
+    );
+    if let Some(sample) = sample {
+        sub = sub.child(
+            text(ping_description(sample, t))
+                .font(rune::tok::type_::LABEL)
+                .color(if sample.latency_ms.is_some() {
+                    k.c.text_base
+                } else {
+                    k.c.text_muted
+                }),
+        );
     }
+    info = info.child(sub);
     card = card.child(info);
     if s.editing {
         let gid = game.id.clone();
