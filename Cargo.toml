@@ -41,9 +41,9 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 lucide-static-svg = { version = "1", default-features = false, features = ["svg"] }
 # Native UI framework (github.com/anomalyco/rune). Pin a rev of the
 # fast-forward-only `dev` branch; `dev` is never rewritten.
-rune = { git = "https://github.com/anomalyco/rune", rev = "00cca3c7ab1ef6193b2a243a339240d8eb291da6", features = ["native-file-dialog"] }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "00cca3c7ab1ef6193b2a243a339240d8eb291da6" }
-rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "00cca3c7ab1ef6193b2a243a339240d8eb291da6" }
+rune = { git = "https://github.com/anomalyco/rune", rev = "78efd4a7876b5478dd72033ce6fd2b2f13ab9f9a", features = ["native-file-dialog"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "78efd4a7876b5478dd72033ce6fd2b2f13ab9f9a" }
+rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "78efd4a7876b5478dd72033ce6fd2b2f13ab9f9a" }
 
 [dependencies]
 rune.workspace = true
@@ -79,3 +79,6 @@ harness = false
 lto = "thin"
 strip = true
 codegen-units = 1
+
+[patch.crates-io]
+parley_engine = { path = "vendor/parley_engine" }

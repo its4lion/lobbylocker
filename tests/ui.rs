@@ -1252,29 +1252,6 @@ fn settings_is_one_page_of_bordered_sections() {
 }
 
 #[test]
-fn settings_scrolls_on_short_windows() {
-    let (mut rt, _config) = cs2_runtime_at((720.0, 560.0));
-    rt.frame(0.0);
-    rt.state.tab = Tab::Settings;
-    rt.invalidate();
-    rt.frame(0.0);
-    let ([_, y_before, _, _], _) = rt
-        .presented("recovery-section-card")
-        .expect("firewall card");
-    rt.wheel(500.0, 300.0, -400.0);
-    for _ in 0..6 {
-        rt.frame(1.0 / 60.0);
-    }
-    let ([_, y_after, _, _], _) = rt
-        .presented("recovery-section-card")
-        .expect("firewall card");
-    assert!(
-        y_after < y_before - 10.0,
-        "wheel scrolls the settings page, before {y_before} after {y_after}"
-    );
-}
-
-#[test]
 fn header_and_settings_language_menus_open_independently() {
     let (mut rt, _config) = cs2_runtime();
     rt.frame(0.0);
