@@ -193,6 +193,7 @@ fn general_section(
             t.text("Language"),
             t.text("Interface language. Game names stay in English."),
             Select::new("language", &locales)
+                .label(t.text("Language"))
                 .width(180.0)
                 .current(Some(&current))
                 .open(s.settings_language_open)
@@ -272,6 +273,7 @@ fn blocking_section(
         t.text("Apply to"),
         t.text("Which apps the firewall rules cover."),
         Select::new("blocking-scope", &labels)
+            .label(t.text("Apply to"))
             .width(180.0)
             .current(Some(&current))
             .open(s.scope_open)

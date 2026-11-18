@@ -197,6 +197,7 @@ fn header_controls(
         .and_then(|i| locales.get(i).cloned())
         .unwrap_or_else(|| "English".to_string());
     let language = rune_kit::Select::new("language-header", &locales)
+        .label(t.text("Language"))
         .width(140.0)
         .current(Some(&current))
         .open(s.language_open)
