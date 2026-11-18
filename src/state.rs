@@ -103,6 +103,12 @@ fn exe_data_dirs(folder: &str) -> Vec<PathBuf> {
 /// Window width (logical points) below which the app switches to the
 /// compact layout.
 pub const COMPACT_WIDTH_THRESHOLD: f32 = 720.0;
+/// Default expanded window size.
+pub const EXPANDED_WIDTH: f32 = 1240.0;
+pub const EXPANDED_HEIGHT: f32 = 860.0;
+/// Default compact window size.
+pub const COMPACT_WIDTH: f32 = 420.0;
+pub const COMPACT_HEIGHT: f32 = 800.0;
 
 pub struct AppState {
     pub engine: Arc<Engine>,
@@ -212,12 +218,12 @@ pub fn init_with(dirs: DataDirs) -> AppState {
         // switching is always on.
         compact_auto: true,
         compact_game_open: false,
-        window_size: (1240.0, 860.0),
-        expanded_size: (1240.0, 860.0),
-        compact_size: (420.0, 800.0),
+        window_size: (EXPANDED_WIDTH, EXPANDED_HEIGHT),
+        expanded_size: (EXPANDED_WIDTH, EXPANDED_HEIGHT),
+        compact_size: (COMPACT_WIDTH, COMPACT_HEIGHT),
         layout_transition: compact,
-        layout_target: (420.0, 800.0),
-        layout_origin_width: 1240.0,
+        layout_target: (COMPACT_WIDTH, COMPACT_HEIGHT),
+        layout_origin_width: EXPANDED_WIDTH,
         layout_observed: false,
         initial_layout_resize: compact,
         layout_path,

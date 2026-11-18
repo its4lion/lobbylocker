@@ -300,7 +300,7 @@ fn blocking_section(
             key: "blocking-section",
             icon: &icons::SHIELD,
             title: t.text("Blocking"),
-            subtitle: scope_warning(&s.status),
+            subtitle: t.text(scope_warning(&s.status)),
             action: None,
             max_rows: None,
         },
