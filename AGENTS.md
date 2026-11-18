@@ -173,18 +173,6 @@ i18n:
 - `cargo run -p lobbylocker-app` vs `cargo run -p lobbylocker-core --bin
   lobbylocker`: the former opens the window; the latter is the headless CLI
   (`--reset-firewall` cleanup helper used by package hooks).
-- Windows builds: the MSVC toolchain (rustup's default
-  `x86_64-pc-windows-msvc`) needs only the Visual Studio C++ build tools
-  rustup asks for. The GNU toolchain (`x86_64-pc-windows-gnu`) additionally
-  needs MinGW-w64's binutils on `PATH` — `windows-link` (pulled in by
-  `parking_lot`, `libloading`, `windows-core`, `windows-sys`, i.e. every
-  Windows UI crate) imports via raw-dylib, and `rustc` builds those import
-  libraries with `dlltool`, which rustup's `rust-mingw` cannot run on its
-  own (rust-lang/rust#140704). Without binutils the build stops at
-  `windows-result` with `error calling dlltool 'dlltool.exe': program not
-  found`. Install MSYS2, run `pacman -S mingw-w64-ucrt-x86_64-binutils`, and
-  put `C:\msys64\ucrt64\bin` on `PATH` (or build with
-  `RUSTFLAGS=-Cdlltool=C:\msys64\ucrt64\bin\dlltool.exe`).
 - A `(deleted)` executable path on Linux means a rebuild replaced the binary
   under a running instance; restart the app instead of trying to make Apply work.
 - Release versions are bumped by `scripts/bump-version.py` across `package.json`,
