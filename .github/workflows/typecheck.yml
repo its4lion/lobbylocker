@@ -1,4 +1,4 @@
-name: Typecheck
+name: Check
 
 on:
   push:
@@ -18,28 +18,11 @@ permissions:
   contents: read
 
 jobs:
-  ui:
-    name: ui check
+  workspace:
+    name: cargo check
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @lobbylocker/ui check
-
-  tauri:
-    name: tauri check
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @lobbylocker/tauri check
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-targets

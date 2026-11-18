@@ -1,6 +1,6 @@
 <div align="center">
   <img
-    src="apps/tauri/src/lib/assets/brand/lobbylocker-icon.svg"
+    src="packaging/brand/lobbylocker-icon.svg"
     alt="LobbyLocker"
     width="88"
   />
@@ -61,7 +61,7 @@ builds are unsigned and may show a SmartScreen warning.
 > **Pre-releases:** a release candidate is built as a **draft** on the
 > [Releases page](https://github.com/its4lion/LobbyLocker/releases) and is
 > published only when it is ready, so a stable release is always a build you
-> have already tested. Prereleases are never sent to the in-app updater.
+> have already tested. LobbyLocker updates by reinstalling from Releases.
 
 ## How to use
 
@@ -70,21 +70,29 @@ builds are unsigned and may show a SmartScreen warning.
 2. Turn on the switches for servers or regions you **don't** want to play on.
 3. Approve the permission prompt. Switch changes apply automatically.
 
+The sidebar lists detected supported games first, followed by your custom and
+other detected games. Use the scan button next to search to find newly installed games. For
+games without a bundled server list, add the server addresses yourself.
+
 Blocks stay active after you close the app. Switch them off to unblock, or use
-**Settings → Reset** (**Reset** in compact mode) to remove them all.
+**Settings → Reset** to remove them all.
 
 ## More options
 
 - **Blocking scope (Windows):** **Settings → Blocking** offers **Selected games**
   or **All apps on this PC**. All-apps blocking needs no executable and affects
   other apps using the same server addresses. Apply changes to update existing
-  blocks. Executable paths are tucked under **Game executables** when needed.
-- **Compact mode:** use **Collapse app** / **Expand app** in the header.
-- **Ping:** use **Check ping** to check all servers with a ping target or just
-  one. Results appear in the cards and never change blocking selections.
+  blocks.
+- **Compact mode:** use **Collapse app** / **Expand app** in the window header.
+  The compact view keeps the game picker and server switches in a narrow window.
+- **Ping:** use **Check ping** to check all servers with a ping target.
+  Results appear in the cards and never change blocking selections.
   These are ICMP probe measurements, not in-game latency; some targets may not reply.
-- **Server editing:** in expanded mode, **Edit mode** lets you add IPs and edit
+- **Server editing:** **Edit mode** lets you add IPs and edit
   a server's addresses and ping target.
+- **Connections:** use **Scan connections** for a read-only snapshot of remote
+  sockets, then search or filter by protocol. These connections are not verified
+  game servers; the page does not scan automatically.
 
 ## Before you play
 
@@ -103,20 +111,31 @@ Blocks stay active after you close the app. Switch them off to unblock, or use
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Does it modify the game?         | No. It uses your OS firewall — no game files changed, no code injected.                                                                                                    |
 | A blocked region still connects? | Expand the app, then use **Refresh IPs**. Toggle affected blocks off and back on, then queue a new match. |
-| How do I uninstall?              | Use **Settings → Reset** (**Reset** in compact mode), wait for confirmation, then uninstall or delete the AppImage.                                                        |
+| How do I uninstall?              | Use **Settings → Reset**, wait for confirmation, then uninstall or delete the AppImage.                                                        |
 
 Need help or have a suggestion? [Open an issue](https://github.com/its4lion/LobbyLocker/issues).
 
 <details>
 <summary>Build from source</summary>
 
-Install Rust 1.90+, Node.js 22.12+, pnpm 10.17.1, and the
-[Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform.
+Pure Rust: the app is a [Rune](https://github.com/anomalyco/rune) native
+desktop app over a standalone core crate — no Node, no pnpm, no webview.
+Install Rust 1.99.1+ and your platform's Vulkan or OpenGL runtime for the
+window.
 
 ```sh
-pnpm install
-pnpm dev
+cargo run -p lobbylocker-app
 ```
+
+Headless checks (no display needed):
+
+```sh
+cargo run -p lobbylocker-app -- --snap /tmp/lobbylocker-cs2.png --scene cs2
+cargo run -p lobbylocker-app -- --tree /tmp/tree.json --scene cs2
+cargo run -p lobbylocker-core --bin lobbylocker -- preview
+```
+
+Scenes: `cs2`, `blocked`, `settings`, `connections`, `empty`, `reset`, `edit`, `edit-add`, `edit-details`, `compact`.
 
 </details>
 

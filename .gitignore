@@ -1,10 +1,5 @@
-node_modules/
-dist/
 target/
-.svelte-kit/
 *.log
 *.key
 *.key.password
 .DS_Store
-apps/tauri/src-tauri/gen/
-apps/tauri/src-tauri/icons/

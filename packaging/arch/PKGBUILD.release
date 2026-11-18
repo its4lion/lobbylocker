@@ -1,4 +1,4 @@
-# Release-automation recipe. The workflow stages an already-built binary and
+# Release-automation recipe. The workflow stages already-built binaries and
 # bundled resources in payload/ before invoking makepkg.
 pkgname=lobbylocker
 pkgver=0.0.0
@@ -7,10 +7,11 @@ pkgdesc="Desktop game server blocker using nftables"
 arch=('x86_64')
 url="https://github.com/its4lion/LobbyLocker"
 license=('MIT')
-depends=('gtk3' 'webkit2gtk-4.1' 'librsvg' 'nftables' 'polkit')
+depends=('vulkan-icd-loader' 'nftables' 'polkit')
 options=('!debug')
 
 package() {
+  install -Dm755 "$startdir/payload/lobbylocker-app" "$pkgdir/usr/bin/lobbylocker-app"
   install -Dm755 "$startdir/payload/lobbylocker" "$pkgdir/usr/bin/lobbylocker"
   install -Dm644 "$startdir/payload/lobbylocker.desktop" \
     "$pkgdir/usr/share/applications/lobbylocker.desktop"

@@ -45,24 +45,15 @@ jobs:
 
           # Writing the version must touch every metadata file and nothing else.
           work=$(mktemp -d)
-          mkdir -p "${work}/apps/tauri/src-tauri" "${work}/packages/ui" "${work}/scripts"
+          mkdir -p "${work}/scripts"
           cp package.json Cargo.toml Cargo.lock "${work}/"
-          cp apps/tauri/package.json "${work}/apps/tauri/"
-          cp apps/tauri/src-tauri/tauri.conf.json "${work}/apps/tauri/src-tauri/"
-          cp packages/ui/package.json "${work}/packages/ui/"
           cp scripts/bump-version.py "${work}/scripts/"
           (cd "${work}" && python3 scripts/bump-version.py set 9.9.9)
 
-          for file in \
-            "${work}/package.json" \
-            "${work}/apps/tauri/package.json" \
-            "${work}/apps/tauri/src-tauri/tauri.conf.json" \
-            "${work}/packages/ui/package.json"; do
-            if ! grep -q '"version": "9.9.9"' "${file}"; then
-              echo "${file} was not updated." >&2
-              exit 1
-            fi
-          done
+          if ! grep -q '"version": "9.9.9"' "${work}/package.json"; then
+            echo "${work}/package.json was not updated." >&2
+            exit 1
+          fi
           if ! grep -q '^version = "9.9.9"' "${work}/Cargo.toml"; then
             echo "Cargo.toml was not updated." >&2
             exit 1
@@ -72,32 +63,16 @@ jobs:
             exit 1
           fi
 
-  frontend:
-    name: Frontend
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @lobbylocker/tauri test
-
   rust-linux:
     name: Rust / Arch Linux
     runs-on: ubuntu-24.04
     container: archlinux:base-devel
     steps:
       - name: Install system dependencies
-        run: pacman -Syu --noconfirm git gtk3 webkit2gtk-4.1 librsvg pkgconf nodejs pnpm
+        run: pacman -Syu --noconfirm git pkgconf
       - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @lobbylocker/tauri icons
-      - run: pnpm --filter @lobbylocker/tauri web:build
       - run: cargo test --workspace
 
   rust-ubuntu:
@@ -105,20 +80,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @lobbylocker/tauri icons
-      - run: pnpm --filter @lobbylocker/tauri web:build
       - run: cargo test --workspace
 
   rust-windows:
@@ -126,14 +89,80 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @lobbylocker/tauri icons
-      - run: pnpm --filter @lobbylocker/tauri web:build
       - run: cargo test --workspace
+
+  headless:
+    name: Headless Rune checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Render every scene headlessly
+        run: |
+          set -euo pipefail
+          for scene in cs2 blocked settings connections empty reset edit edit-add edit-details; do
+            cargo run -p lobbylocker-app -- --snap "/tmp/lobbylocker-${scene}.png" --scene "$scene"
+          done
+      - name: Dump element trees
+        run: |
+          set -euo pipefail
+          for scene in cs2 blocked settings connections empty reset edit edit-add edit-details; do
+            cargo run -p lobbylocker-app -- --tree "/tmp/lobbylocker-${scene}.json" --scene "$scene"
+          done
+          python3 - <<'EOF'
+          import json, sys
+          for scene in ["cs2", "blocked", "settings", "connections", "empty", "reset", "edit", "edit-add", "edit-details"]:
+              tree = json.load(open(f"/tmp/lobbylocker-{scene}.json"))
+              elements = tree["elements"]
+              assert elements, scene
+              keys = {e.get("key") for e in elements if e.get("key")}
+              assert "tab-regions" in keys, scene
+          print("all scenes rendered")
+          EOF
+      - name: Check compact layouts
+        run: |
+          set -euo pipefail
+          for size in 420x800 360x560; do
+            cargo run -p lobbylocker-app -- --snap "/tmp/lobbylocker-compact-${size}.png" --scene compact --size "$size"
+            cargo run -p lobbylocker-app -- --tree "/tmp/lobbylocker-compact-${size}.json" --scene compact --size "$size"
+          done
+          python3 - <<'EOF'
+          import json
+          for size in ["420x800", "360x560"]:
+              tree = json.load(open(f"/tmp/lobbylocker-compact-{size}.json"))
+              keys = {e.get("key") for e in tree["elements"] if e.get("key")}
+              assert {"compact-game-trigger", "compact-reset", "layout-toggle"} <= keys, size
+              assert "tab-regions" not in keys, size
+          EOF
+      - name: Check compact window transitions
+        run: |
+          python3 - <<'EOF'
+          import json, os, pathlib, subprocess, tempfile
+          with tempfile.TemporaryDirectory(prefix="lobbylocker-layout-") as temp:
+              root = pathlib.Path(temp)
+              env = os.environ.copy()
+              env["XDG_CONFIG_HOME"] = temp
+              env["LOBBYLOCKER_NO_FIREWALL"] = "1"
+              script, tree = root / "actions.json", root / "tree.json"
+              for actions, compact in [
+                  ([{"t": 0.2, "type": "tap", "key": "layout-toggle"}], True),
+                  ([{"t": 0.2, "type": "tap", "key": "layout-toggle"},
+                    {"t": 0.7, "type": "tap", "key": "layout-toggle"}], False),
+              ]:
+                  script.write_text(json.dumps(actions))
+                  subprocess.run(["cargo", "run", "-q", "-p", "lobbylocker-app", "--", "--scene", "cs2", "--script", str(script), "--at", "1.2", "--tree", str(tree)], env=env, check=True)
+                  elements = json.loads(tree.read_text())["elements"]
+                  keys = {e.get("key") for e in elements}
+                  assert ("compact-picker" in keys) == compact
+                  pane = next(e for e in elements if e.get("key") == "main-pane")
+                  assert (pane["rect"][2] < 420) == compact, pane["rect"]
+          EOF
+      - name: Upload snapshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: rune-snapshots
+          path: /tmp/lobbylocker-*.png
+          if-no-files-found: error

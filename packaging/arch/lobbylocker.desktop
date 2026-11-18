@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=LobbyLocker
-Exec=lobbylocker
+Exec=lobbylocker-app
 Icon=lobbylocker
 Terminal=false
 StartupWMClass=lobbylocker

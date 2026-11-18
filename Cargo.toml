@@ -1,17 +1,33 @@
+[package]
+name = "lobbylocker-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+name = "lobbylocker_app"
+path = "src/lib.rs"
+
+[[bin]]
+name = "lobbylocker-app"
+path = "src/main.rs"
+
 [workspace]
-members = ["apps/tauri/src-tauri", "apps/tauri/src-tauri/core"]
-default-members = ["apps/tauri/src-tauri/core"]
+members = ["crates/core"]
+default-members = ["."]
 resolver = "2"
 
 [workspace.package]
 version = "0.0.6"
 edition = "2021"
 license = "MIT"
-rust-version = "1.90"
+rust-version = "1.99.1"
 repository = "https://github.com/its4lion/LobbyLocker"
 
 [workspace.dependencies]
-lobbylocker-core = { path = "apps/tauri/src-tauri/core" }
+lobbylocker-core = { path = "crates/core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ipnet = "2"
@@ -21,7 +37,43 @@ dirs = "6"
 tempfile = "3"
 fs2 = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-rfd = "0.15"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"] }
+lucide-static-svg = { version = "1", default-features = false, features = ["svg"] }
+# Native UI framework (github.com/anomalyco/rune). Pin a rev of the
+# fast-forward-only `dev` branch; `dev` is never rewritten.
+rune = { git = "https://github.com/anomalyco/rune", rev = "00cca3c7ab1ef6193b2a243a339240d8eb291da6", features = ["native-file-dialog"] }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "00cca3c7ab1ef6193b2a243a339240d8eb291da6" }
+rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "00cca3c7ab1ef6193b2a243a339240d8eb291da6" }
+
+[dependencies]
+rune.workspace = true
+rune-kit.workspace = true
+rune-theme-opencode.workspace = true
+lobbylocker-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+dirs.workspace = true
+base64.workspace = true
+image.workspace = true
+# Windows: run the app itself as administrator (requireAdministrator manifest).
+# The core crate embeds the same manifest for the cleanup CLI.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+# Source of truth for the vendored icon set (used by the icon-parity test).
+lucide-static-svg.workspace = true
+
+[[test]]
+name = "ui"
+path = "tests/ui.rs"
+
+[[test]]
+name = "native_layout_probe"
+path = "tests/native_layout_probe.rs"
+harness = false
 
 [profile.release]
 lto = "thin"

@@ -2,20 +2,5 @@
   "name": "lobbylocker",
   "private": true,
   "version": "0.0.6",
-  "repository": "https://github.com/its4lion/LobbyLocker",
-  "packageManager": "pnpm@10.17.1",
-  "scripts": {
-    "dev": "pnpm --filter @lobbylocker/tauri dev",
-    "build": "pnpm --filter @lobbylocker/tauri build",
-    "check": "pnpm -r check && cargo check --workspace --all-targets",
-    "test": "pnpm --filter @lobbylocker/tauri test && cargo test --workspace",
-    "format": "pnpm format:web && cargo fmt --all",
-    "format:check": "pnpm format:web:check && cargo fmt --all --check",
-    "format:web:check": "prettier --check 'apps/tauri/**/*.{ts,svelte,css,json,js}' 'packages/ui/**/*.{ts,svelte,css,json}' 'data/locales/*.json' package.json pnpm-workspace.yaml",
-    "format:web": "prettier --write 'apps/tauri/**/*.{ts,svelte,css,json,js}' 'packages/ui/**/*.{ts,svelte,css,json}' 'data/locales/*.json' package.json pnpm-workspace.yaml"
-  },
-  "devDependencies": {
-    "prettier": "^3",
-    "prettier-plugin-svelte": "^3"
-  }
+  "repository": "https://github.com/its4lion/LobbyLocker"
 }

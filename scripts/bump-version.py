@@ -35,12 +35,7 @@ ANY_VERSION = re.compile(
     r"(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
 )
 
-JSON_FILES = (
-    "package.json",
-    "apps/tauri/package.json",
-    "packages/ui/package.json",
-    "apps/tauri/src-tauri/tauri.conf.json",
-)
+JSON_FILES = ("package.json",)
 
 
 class Failure(Exception):
@@ -88,16 +83,16 @@ def apply_version(version: str) -> dict[str, str]:
 
     updated = bump(
         "Cargo.lock",
-        r'(?m)^(\[\[package\]\]\r?\nname = "(?:lobbylocker-core|lobbylocker-tauri)"\r?\nversion = )"[^"\n]*"',
+        r'(?m)^(\[\[package\]\]\r?\nname = "(?:lobbylocker-core|lobbylocker-app)"\r?\nversion = )"[^"\n]*"',
         expected_count=2,
     )
     packages = tomllib.loads(updated)["package"]
     workspace = {
         package["name"]: package["version"]
         for package in packages
-        if package["name"] in {"lobbylocker-core", "lobbylocker-tauri"}
+        if package["name"] in {"lobbylocker-core", "lobbylocker-app"}
     }
-    expected = {"lobbylocker-core": version, "lobbylocker-tauri": version}
+    expected = {"lobbylocker-core": version, "lobbylocker-app": version}
     if workspace != expected:
         raise Failure(f"Cargo.lock workspace versions are {workspace}, expected {expected}")
 

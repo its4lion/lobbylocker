@@ -1,14 +1,8 @@
-name: Publish Updater
+name: Publish Release
 
-run-name: >-
-  ${{ github.event_name == 'release'
-      && format('Updater feed for {0}', github.event.release.tag_name)
-      || inputs.tag && format('Refresh updater feed for {0}', inputs.tag)
-      || 'Publish the release candidate' }}
+run-name: Publish the release candidate
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -17,7 +11,7 @@ on:
         type: string
 
 concurrency:
-  group: publish-updater
+  group: publish-release
   cancel-in-progress: false
 
 permissions:
@@ -57,7 +51,7 @@ jobs:
             exit 1
           fi
           if [[ "${prerelease}" == "true" ]]; then
-            echo "The candidate draft ${tag} is flagged as a prerelease; publishing it would never reach the stable feed." >&2
+            echo "The candidate draft ${tag} is flagged as a prerelease." >&2
             exit 1
           fi
 
@@ -85,8 +79,7 @@ jobs:
           python3 scripts/bump-version.py set "${version}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json apps/tauri/package.json packages/ui/package.json \
-            apps/tauri/src-tauri/tauri.conf.json Cargo.toml Cargo.lock
+          git add package.json Cargo.toml Cargo.lock
           if ! git diff --cached --quiet; then
             git commit -m "chore: bump version to ${version}"
             git push origin "HEAD:${GITHUB_REF}"
@@ -104,137 +97,3 @@ jobs:
             exit 1
           fi
           echo "Published ${TAG} at ${bump_sha}."
-
-  feed:
-    name: Publish the updater manifest
-    needs: publish-candidate
-    if: >-
-      always() && !cancelled() &&
-      (github.event_name == 'release' || inputs.tag != '' ||
-       needs.publish-candidate.result == 'success')
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    env:
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - name: Resolve the release to publish
-        id: resolve
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
-          CANDIDATE_TAG: ${{ needs.publish-candidate.outputs.tag }}
-          REQUESTED_TAG: ${{ inputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag=""
-          if [[ "${GITHUB_EVENT_NAME}" == "release" ]]; then
-            tag="${EVENT_TAG}"
-          else
-            tag="${REQUESTED_TAG:-${CANDIDATE_TAG}}"
-          fi
-          if [[ -z "${tag}" || "${tag}" == "updater" ]]; then
-            echo "Nothing to publish to the updater feed."
-            exit 0
-          fi
-
-          # A missing stable release or API failure must fail, not silently
-          # leave the old feed in place while the workflow reports success.
-          flags=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '[.tag_name, .draft, .prerelease] | @tsv')
-          read -r actual_tag draft prerelease <<< "${flags}"
-          if [[ "${actual_tag}" != "${tag}" ]]; then
-            echo "Expected release ${tag}, got ${actual_tag}." >&2
-            exit 1
-          fi
-          if [[ "${draft}" == "true" || "${prerelease}" == "true" ]]; then
-            echo "Drafts and prereleases never reach the stable feed."
-            exit 0
-          fi
-          if [[ "${draft}" != "false" || "${prerelease}" != "false" ]]; then
-            echo "Cannot confirm publication status for ${tag}." >&2
-            exit 1
-          fi
-          if [[ ! "${tag}" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "Expected a stable version tag such as v0.0.3, got ${tag}." >&2
-            exit 1
-          fi
-
-          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-      - name: Build the updater manifest
-        if: steps.resolve.outputs.tag != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          TAG: ${{ steps.resolve.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p release-assets
-          gh release download "${TAG}" --repo "${GITHUB_REPOSITORY}" --dir release-assets
-
-          version="${TAG#v}"
-          notes=$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json body --jq .body)
-          pub_date=$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json publishedAt --jq .publishedAt)
-          export VERSION="${version}"
-          export NOTES="${notes}"
-          export PUB_DATE="${pub_date}"
-
-          node <<'NODE'
-          const fs = require("node:fs");
-          const path = require("node:path");
-
-          const directory = "release-assets";
-          const files = fs.readdirSync(directory);
-          const one = (suffix) => {
-            const matches = files.filter((file) => file.endsWith(suffix));
-            if (matches.length !== 1) {
-              throw new Error(`Expected one ${suffix} asset, found: ${matches.join(", ")}`);
-            }
-            return matches[0];
-          };
-          const appImage = one(".AppImage");
-          const nsis = one(".exe");
-          const signature = (file) =>
-            fs.readFileSync(path.join(directory, `${file}.sig`), "utf8").trim();
-          const url = (file) =>
-            `https://github.com/${process.env.REPOSITORY}/releases/download/${process.env.TAG}/${encodeURIComponent(file)}`;
-          const manifest = {
-            version: process.env.VERSION,
-            notes: process.env.NOTES,
-            pub_date: process.env.PUB_DATE,
-            platforms: {
-              "linux-x86_64": {
-                url: url(appImage),
-                signature: signature(appImage),
-              },
-              "windows-x86_64": {
-                url: url(nsis),
-                signature: signature(nsis),
-              },
-            },
-          };
-          fs.writeFileSync("latest.json", `${JSON.stringify(manifest, null, 2)}\n`);
-          NODE
-
-          target=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')
-          if gh release view updater --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload updater latest.json --repo "${GITHUB_REPOSITORY}" --clobber
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/updater" \
-              -f sha="${target}" \
-              -F force=true >/dev/null
-            gh release edit updater \
-              --repo "${GITHUB_REPOSITORY}" \
-              --prerelease \
-              --target "${target}" \
-              --title "LobbyLocker Update Feed" \
-              --notes "Machine-readable signed update metadata. Install LobbyLocker from a versioned release."
-          else
-            gh release create updater latest.json \
-              --repo "${GITHUB_REPOSITORY}" \
-              --prerelease \
-              --latest=false \
-              --target "${target}" \
-              --title "LobbyLocker Update Feed" \
-              --notes "Machine-readable signed update metadata. Install LobbyLocker from a versioned release."
-          fi
