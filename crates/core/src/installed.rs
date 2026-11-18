@@ -41,52 +41,6 @@ pub fn resolve_executable(path: &str) -> Result<String> {
         .ok_or_else(|| "Overwatch Launcher.exe only starts the game. Choose Overwatch.exe in the _retail_ folder after completing the Battle.net installation.".into())
 }
 
-/// Recognize a Battle.net installation, not an arbitrary custom Overwatch.exe.
-pub fn is_battlenet_overwatch_executable(path: &Path) -> bool {
-    if !path.is_absolute()
-        || !path
-            .file_name()
-            .is_some_and(|name| name.eq_ignore_ascii_case("Overwatch.exe"))
-    {
-        return false;
-    }
-    let Some(directory) = path.parent() else {
-        return false;
-    };
-    let mut roots = vec![directory];
-    if directory
-        .file_name()
-        .is_some_and(|name| name.eq_ignore_ascii_case("_retail_"))
-    {
-        roots.extend(directory.parent());
-    }
-    let Ok(executable) = fs::canonicalize(path) else {
-        return false;
-    };
-    roots.into_iter().any(|root| {
-        root.join("Overwatch Launcher.exe").is_file()
-            && OVERWATCH_EXECUTABLES.iter().any(|candidate| {
-                executable_in(root, &[*candidate])
-                    .and_then(|path| fs::canonicalize(path).ok())
-                    .is_some_and(|path| path == executable)
-            })
-    })
-}
-
-/// A different available binary requires explicit replacement approval.
-pub fn requires_executable_replacement(current: Option<&str>, selected: &str) -> bool {
-    let Some(current) = current.map(Path::new).filter(|path| path.is_absolute()) else {
-        return false;
-    };
-    let Ok(current) = fs::canonicalize(current) else {
-        return false;
-    };
-    if !current.is_file() {
-        return false;
-    }
-    fs::canonicalize(selected).is_ok_and(|selected| selected != current)
-}
-
 /// Only known game binaries, never the first .exe in a folder or a launcher.
 /// Canonical containment also prevents installation symlinks escaping the game.
 pub(crate) fn game_executable(game: &InstalledGame) -> Option<String> {

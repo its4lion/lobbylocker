@@ -261,19 +261,6 @@ impl Preferences {
         )
     }
 
-    pub fn set_area_blocked(&mut self, game: &Game, area: &str, blocked: bool) {
-        let all_keys: HashSet<_> = game
-            .regions
-            .iter()
-            .filter(|r| r.area == area)
-            .map(|r| format!("{}:{}", game.id, r.id))
-            .collect();
-        self.blocked_regions.retain(|key| !all_keys.contains(key));
-        if blocked {
-            self.blocked_regions.extend(game.area_keys(area));
-        }
-    }
-
     pub fn validate(&self) -> Result<()> {
         if self.schema_version != 1
             || self.blocked_regions.len() > 5000

@@ -290,8 +290,16 @@ fn area_toggles_group_servers_without_touching_other_games() {
         game.area_keys("Europe"),
         vec!["test-game:eu-one", "test-game:eu-two"]
     );
-    preferences.set_area_blocked(&game, "Europe", true);
-    preferences.set_area_blocked(&game, "Europe", true);
+    let europe_keys: std::collections::HashSet<_> = game
+        .regions
+        .iter()
+        .filter(|r| r.area == "Europe")
+        .map(|r| format!("{}:{}", game.id, r.id))
+        .collect();
+    preferences
+        .blocked_regions
+        .retain(|k| !europe_keys.contains(k));
+    preferences.blocked_regions.extend(game.area_keys("Europe"));
     assert_eq!(preferences.blocked_regions.len(), 4);
     assert!(!preferences
         .blocked_regions
@@ -300,7 +308,10 @@ fn area_toggles_group_servers_without_touching_other_games() {
         resolve_rules_for_scope(&[game.clone()], &preferences, FirewallScope::SystemWide).unwrap();
     assert_eq!(rules.len(), 2);
     assert!(rules.iter().any(|r| r.endpoint.custom));
-    preferences.set_area_blocked(&game, "Europe", false);
+    let europe_keys: std::collections::HashSet<_> = game.area_keys("Europe").into_iter().collect();
+    preferences
+        .blocked_regions
+        .retain(|k| !europe_keys.contains(k));
     assert_eq!(
         preferences.blocked_regions,
         vec!["other-game:eu-one", "test-game:middle-east"]

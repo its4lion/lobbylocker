@@ -2,26 +2,6 @@
 use super::*;
 
 #[test]
-fn only_a_different_available_executable_requires_replacement_approval() {
-    let root = tempfile::tempdir().unwrap();
-    let current = root.path().join("current.exe");
-    let selected = root.path().join("selected.exe");
-    fs::write(&current, b"never executed").unwrap();
-    fs::write(&selected, b"never executed").unwrap();
-    let current = current.to_str().unwrap();
-    let selected = selected.to_str().unwrap();
-    assert!(requires_executable_replacement(Some(current), selected));
-    assert!(!requires_executable_replacement(Some(current), current));
-    assert!(!requires_executable_replacement(None, selected));
-    assert!(!requires_executable_replacement(
-        Some(root.path().to_str().unwrap()),
-        selected
-    ));
-    fs::remove_file(current).unwrap();
-    assert!(!requires_executable_replacement(Some(current), selected));
-}
-
-#[test]
 fn overwatch_launcher_resolves_verified_retail_or_legacy_binary_without_running_it() {
     for launcher_name in ["Overwatch Launcher.exe", "OVERWATCH LAUNCHER.EXE"] {
         let root = tempfile::tempdir().unwrap();
@@ -85,12 +65,6 @@ fn overwatch_launcher_cannot_resolve_an_external_binary_through_symlinks() {
     assert!(
         resolve_executable(directory.join("Overwatch Launcher.exe").to_str().unwrap()).is_err()
     );
-    assert!(!is_battlenet_overwatch_executable(
-        &directory.join("_retail_/Overwatch.exe")
-    ));
-    assert!(!is_battlenet_overwatch_executable(
-        &directory.join("Overwatch.exe")
-    ));
 }
 
 #[test]
