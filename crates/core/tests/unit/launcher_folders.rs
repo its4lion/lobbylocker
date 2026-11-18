@@ -13,7 +13,7 @@ fn finds_xbox_epic_and_battlenet_in_multiple_local_libraries() {
     let battle = second.path().join("Overwatch/_retail_");
     fs::create_dir_all(&battle).unwrap();
     fs::write(battle.join("Overwatch.exe"), b"never executed").unwrap();
-    let scan = scan(&[first.path().into(), second.path().into()]);
+    let scan = scan_with_exclusions(&[first.path().into(), second.path().into()], &[]);
     assert_eq!(scan.games.len(), 3);
     assert!(scan
         .games
@@ -33,5 +33,7 @@ fn ignores_random_folders_and_invalid_or_external_entity_metadata() {
     )
     .unwrap();
     fs::write(game.join("MicrosoftGame.config"), r#"<!DOCTYPE Game [<!ENTITY external SYSTEM "file:///etc/passwd">]><Game><Identity Name="Example"/>&external;</Game>"#).unwrap();
-    assert!(scan(&[root.path().into()]).games.is_empty());
+    assert!(scan_with_exclusions(&[root.path().into()], &[])
+        .games
+        .is_empty());
 }

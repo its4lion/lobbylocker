@@ -98,11 +98,6 @@ fn epic(directory: &Path) -> Option<InstalledGame> {
     None
 }
 
-#[cfg(test)]
-fn scan(roots: &[PathBuf]) -> Scan {
-    scan_with_exclusions(roots, &[])
-}
-
 pub(crate) fn scan_with_exclusions(roots: &[PathBuf], excluded: &[PathBuf]) -> Scan {
     let mut scan = Scan::default();
     let mut candidates = BTreeSet::new();
