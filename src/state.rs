@@ -193,7 +193,10 @@ pub fn init_with(dirs: DataDirs) -> AppState {
     let locales =
         Catalogue::load(&dirs.locales).unwrap_or_else(|e| panic!("Could not load languages: {e}"));
     let status = engine.runtime();
-    let selected = first_game(&status).unwrap_or_default();
+    let selected = library_games(&status)
+        .first()
+        .map(|g| g.id.clone())
+        .unwrap_or_default();
     AppState {
         engine,
         locales,
@@ -264,11 +267,6 @@ pub fn init_with(dirs: DataDirs) -> AppState {
         banners: BTreeMap::new(),
         image_cache: None,
     }
-}
-
-fn first_game(status: &EngineRuntime) -> Option<String> {
-    let games = library_games(status);
-    games.first().map(|g| g.id.clone())
 }
 
 /// A release to announce: the version, and whether it is newer than the one
