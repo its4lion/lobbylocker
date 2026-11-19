@@ -7,30 +7,51 @@ use rune::{col, el, row, text, Cx, El, ScrollSpec};
 use rune_kit::shell::{SplitView, Toolbar};
 use rune_kit::{Button, IconButton, Kit};
 
-const BRAND_SVG: &[u8] = include_bytes!("../packaging/brand/lobbylocker-icon.svg");
+const BRAND_LOCKUP_ON_DARK: &[u8] =
+    include_bytes!("../packaging/brand/lobbylocker-lockup-on-dark.svg");
+const BRAND_LOCKUP_ON_LIGHT: &[u8] =
+    include_bytes!("../packaging/brand/lobbylocker-lockup-on-light.svg");
 
-fn brand_lockup(s: &AppState, scale: f32) -> El {
+/// The lockup art is 9245×2749; draw it at the same aspect ratio.
+const BRAND_LOCKUP_ASPECT: f32 = 9245.0 / 2749.0;
+
+fn brand_lockup(s: &AppState, k: &Kit, scale: f32) -> El {
+    let height = 24.0;
+    let width = height * BRAND_LOCKUP_ASPECT;
     if let Some(cache) = &s.image_cache {
-        let image = cache.svg(
-            std::sync::Arc::<[u8]>::from(BRAND_SVG),
-            24.0,
-            scale.max(1.0),
-        );
+        let bytes = if s.dark {
+            BRAND_LOCKUP_ON_DARK
+        } else {
+            BRAND_LOCKUP_ON_LIGHT
+        };
+        let image = cache.svg(std::sync::Arc::<[u8]>::from(bytes), width, scale.max(1.0));
         return el()
-            .key("brand-icon")
+            .key("brand-lockup")
             .pixels(image.pixels())
-            .size(24.0, 24.0)
-            .radius(6.0);
+            .size(width, height);
     }
-    el().key("brand-icon")
-        .size(24.0, 24.0)
-        .radius(6.0)
-        .fill(rune::tok::accent(0, s.dark))
-        .center()
+    // Tests render before `setup` installs the image cache; keep a text mark
+    // there without changing the real lockup.
+    row()
+        .key("brand-lockup")
+        .h(height)
+        .center_y()
+        .gap(8.0)
         .child(
-            text("L")
-                .font(rune::tok::type_::TITLE)
-                .color(rune::Color::WHITE),
+            el().size(24.0, 24.0)
+                .radius(6.0)
+                .fill(rune::tok::accent(0, s.dark))
+                .center()
+                .child(
+                    text("L")
+                        .font(rune::tok::type_::TITLE)
+                        .color(rune::Color::WHITE),
+                ),
+        )
+        .child(
+            text("LobbyLocker")
+                .font(rune::TextStyle::new(14.0, 600.0))
+                .color(k.c.text_base),
         )
 }
 
@@ -121,13 +142,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .pin(Some(cx.titlebar_inset() + 12.0), Some(0.0), None, None)
         .h(48.0)
         .center_y()
-        .gap(8.0)
-        .child(brand_lockup(s, cx.env().scale))
-        .child(
-            text("LobbyLocker")
-                .font(rune::TextStyle::new(14.0, 600.0))
-                .color(k.c.text_base),
-        );
+        .child(brand_lockup(s, k, cx.env().scale));
     overlays.push(brand);
     if !s.compact {
         overlays.push(
