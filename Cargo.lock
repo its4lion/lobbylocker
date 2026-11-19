@@ -1718,7 +1718,7 @@ checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
 
 [[package]]
 name = "lobbylocker-app"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "base64 0.22.1",
  "dirs",
@@ -1737,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "lobbylocker-core"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "base64 0.22.1",
  "dirs",
