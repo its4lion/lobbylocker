@@ -22,11 +22,7 @@
   </p>
 </div>
 
-> [!WARNING]
-> LobbyLocker is still in beta. Server addresses can change, Windows builds are
-> unsigned, and blocking a shared IP range can affect other applications.
-
-Supports **Dead by Daylight**, **Overwatch 2**, **Deadlock**, and **Counter-Strike 2**, plus custom games.
+Supports **Deadlock**, **Counter-Strike 2**, **Overwatch 2**, and **Dead by Daylight**, plus custom games.
 
 <div align="center">
     <img
