@@ -1,4 +1,4 @@
-name: Clippy
+name: Checks
 
 on:
   push:
@@ -18,6 +18,16 @@ permissions:
   contents: read
 
 jobs:
+  rustfmt:
+    name: Rustfmt
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.99.1
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
   linux:
     name: Arch Linux
     runs-on: ubuntu-24.04
