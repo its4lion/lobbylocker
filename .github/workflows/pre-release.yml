@@ -341,6 +341,16 @@ jobs:
         run: cargo run -q -p bump-version -- set "${VERSION}"
       - name: Build release binaries
         run: cargo build --release -p lobbylocker-app -p lobbylocker-core
+      - name: Verify Windows administrator manifests
+        shell: pwsh
+        run: |
+          foreach ($exe in @("lobbylocker-app.exe", "lobbylocker.exe")) {
+            $bytes = [IO.File]::ReadAllBytes((Join-Path (Get-Location) "target/release/$exe"))
+            $content = [Text.Encoding]::ASCII.GetString($bytes)
+            if (!$content.Contains('<requestedExecutionLevel level="requireAdministrator"')) {
+              throw "$exe is missing its administrator manifest"
+            }
+          }
       - name: Stage payload
         shell: bash
         run: |

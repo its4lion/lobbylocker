@@ -1805,6 +1805,7 @@ version = "0.0.9"
 dependencies = [
  "base64 0.22.1",
  "dirs",
+ "embed-resource",
  "image",
  "lobbylocker-core",
  "lucide-static-svg",
