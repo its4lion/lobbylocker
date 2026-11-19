@@ -192,9 +192,13 @@ i18n:
 
 - Rune pins by git rev, so `cargo` vendors the full Rune workspace into
   `~/.cargo/git/checkouts/`. First fetch is slow; CI caches it.
+- Rune's `[patch.crates-io]` entries do not reach a downstream app. `vendor/`
+  mirrors the patched `winit`, `wgpu-hal`, `accesskit_windows`,
+  `accesskit_macos`, and `parley_engine`; re-copy them from Rune's `vendor/`
+  when bumping the pinned rev, or the Windows and macOS builds break.
 - Rune's `--snap`/`--tree` need an env with a software Vulkan/ICD stack in CI
-  (gpu init). The `tests` workflow's `headless` job runs on `ubuntu-24.04`
-  where llvmpipe provides it.
+  (gpu init). The `tests` workflow's `headless` job runs on `ubuntu-24.04` and
+  installs `mesa-vulkan-drivers` (llvmpipe) for it.
 - `--snap` scenes are deterministic: `cs2`, `blocked`, `settings`,
   `connections`, `empty`, `reset`, `edit`, `compact`, `update`. Scene fns must
   stay UI-only — never write config or firewall state.

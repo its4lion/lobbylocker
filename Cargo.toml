@@ -81,4 +81,11 @@ strip = true
 codegen-units = 1
 
 [patch.crates-io]
+# Rune's workspace patches these crates for Windows and macOS, but a
+# dependency's `[patch]` does not apply to the workspace that depends on it.
+# Keep them in sync with the pinned Rune rev (see its root Cargo.toml).
+winit = { path = "vendor/winit" }
+wgpu-hal = { path = "vendor/wgpu-hal" }
+accesskit_windows = { path = "vendor/accesskit_windows" }
+accesskit_macos = { path = "vendor/accesskit_macos" }
 parley_engine = { path = "vendor/parley_engine" }
