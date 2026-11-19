@@ -157,10 +157,10 @@ i18n:
   `packaging/arch/*.hook`) call `lobbylocker --reset-firewall`. They must run
   only on a real removal, never on upgrade, and must abort the uninstall if cleanup
   fails.
-- `cargo run -p fetch-cloud-ranges` regenerates bundled `providerScope` ranges (run
-  it from the repo root).
-  **Endpoint ids must stay identical to the ones the in-app refresh writes**
-  (`{regionId}-{index}`), otherwise a refresh treats every bundled address as new.
+- Bundled `providerScope` ranges are only a starting point; the in-app refresh
+  fills them from the provider's feed. **Endpoint ids must stay identical to the
+  ones the in-app refresh writes** (`{regionId}-{index}`), otherwise a refresh
+  treats every bundled address as new.
 - Windows-specific behavior in `inspection` and `windows_firewall` **still needs
   validation on Windows** — `cargo test` passes on Linux without proving it.
 

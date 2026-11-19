@@ -15,7 +15,7 @@ name = "lobbylocker-app"
 path = "src/main.rs"
 
 [workspace]
-members = ["crates/core", "tools/bump-version", "tools/fetch-cloud-ranges"]
+members = ["crates/core", "tools/bump-version"]
 default-members = ["."]
 resolver = "2"
 
