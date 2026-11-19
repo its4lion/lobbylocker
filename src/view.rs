@@ -292,10 +292,14 @@ fn compact_game_picker(
         }
     };
     let current = selected.map(name);
+    let banner = selected.and_then(|game| s.banners.get(&game.id));
+    let on_banner = banner.is_some();
     let mut value = row().grow(1.0).shrink().min_w(0.0).gap(8.0).center_y();
     let label = text(current.as_deref().unwrap_or(t.text("Select a game")))
         .font(k.ty.ui_compact)
-        .color(if selected.is_some() {
+        .color(if on_banner {
+            k.c.white
+        } else if selected.is_some() {
             k.c.text_base
         } else {
             k.c.text_faint
@@ -320,7 +324,11 @@ fn compact_game_picker(
         },
         16.0,
     )
-    .color(k.c.icon_muted)
+    .color(if on_banner {
+        k.c.white.alpha(0.85)
+    } else {
+        k.c.icon_muted
+    })
     .a11y_hidden();
     let trigger = row()
         .key("compact-game-trigger")
@@ -338,8 +346,32 @@ fn compact_game_picker(
         .gap(6.0)
         .center_y()
         .radius(k.radius.md)
-        .fill(k.c.layer_01)
+        .fill(if on_banner {
+            rune::Color::TRANSPARENT
+        } else {
+            k.c.layer_01
+        })
         .hover(k.c.hover);
+    let trigger = if let Some(pixels) = banner {
+        trigger
+            .clip_rounded(k.radius.md)
+            .child(
+                el().key("compact-banner-backdrop")
+                    .absolute(0.0, 0.0)
+                    .w_full()
+                    .h_full()
+                    .pixels_fit(pixels, rune::SurfaceFit::Fill),
+            )
+            .child(
+                el().key("compact-banner-scrim")
+                    .absolute(0.0, 0.0)
+                    .w_full()
+                    .h_full()
+                    .fill(k.c.black.alpha(0.45)),
+            )
+    } else {
+        trigger
+    };
     let trigger = trigger.child(value).child(chevron);
     let picker = if disabled {
         trigger.layer_opacity(0.5)

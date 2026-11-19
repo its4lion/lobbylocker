@@ -95,6 +95,37 @@ fn regions_page_shows_the_steam_banner() {
 }
 
 #[test]
+fn compact_picker_puts_the_game_banner_behind_its_name() {
+    let (mut rt, _config) = cs2_runtime_at((420.0, 800.0));
+    rt.state.compact = true;
+    rt.frame(0.0);
+    assert!(
+        rt.find("compact-banner-backdrop").is_none(),
+        "no picked game art yet"
+    );
+
+    let pixels = rune::Pixels::new();
+    pixels.set(4, 2, vec![180u8; 4 * 2 * 4]);
+    rt.state.banners.insert("cs2".to_string(), pixels);
+    rt.invalidate();
+    for _ in 0..40 {
+        rt.frame(1.0 / 60.0);
+    }
+
+    let (backdrop, _) = rt
+        .presented("compact-banner-backdrop")
+        .expect("banner backdrop");
+    let (trigger, _) = rt.presented("compact-game-trigger").expect("game trigger");
+    assert!(
+        backdrop[0] >= trigger[0] - 1.0
+            && backdrop[1] >= trigger[1] - 1.0
+            && backdrop[0] + backdrop[2] <= trigger[0] + trigger[2] + 1.0
+            && backdrop[1] + backdrop[3] <= trigger[1] + trigger[3] + 1.0,
+        "banner backdrop {backdrop:?} stays inside the trigger {trigger:?}"
+    );
+}
+
+#[test]
 fn regions_page_renders_bundled_games() {
     let (mut rt, _config) = cs2_runtime();
     rt.frame(0.0);
