@@ -118,7 +118,7 @@ Section "Install"
   SetOutPath "$INSTDIR"
   CreateDirectory "$SMPROGRAMS\LobbyLocker"
   CreateShortcut "$SMPROGRAMS\LobbyLocker\LobbyLocker.lnk" "$INSTDIR\lobbylocker-app.exe"
-  CreateShortcut "$SMPROGRAMS\LobbyLocker\LobbyLocker Cleanup (reset firewall).lnk" "$INSTDIR\lobbylocker.exe" "--reset-firewall"
+  CreateShortcut "$SMPROGRAMS\LobbyLocker\LobbyLocker Cleanup (reset firewall).lnk" "$INSTDIR\lobbylocker-app.exe" "--reset-firewall"
   ${If} $LegacyUpdate == 1
     !insertmacro UpdateLegacyShortcuts all
     !insertmacro UpdateLegacyShortcuts current

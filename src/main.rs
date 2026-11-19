@@ -4,6 +4,8 @@
 //! `cargo run -p lobbylocker-app` opens the window;
 //! `-- --snap lobbylocker.png --scene cs2` renders it headless.
 
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 use lobbylocker_app::state::{self, AppState};
 use lobbylocker_app::view;
 
