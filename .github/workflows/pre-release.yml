@@ -345,7 +345,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p payload
+          mkdir -p payload release-assets
           cp target/release/lobbylocker-app.exe payload/lobbylocker-app.exe
           cp target/release/lobbylocker.exe payload/lobbylocker.exe
           cp -a data payload/data
