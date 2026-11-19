@@ -1,8 +1,6 @@
 //! Exercise removal hooks with a fake cleanup executable, never the OS firewall.
 
-#[cfg(target_os = "linux")]
 const DEB_PRERM: &str = include_str!("../../../packaging/linux/deb-prerm.sh");
-#[cfg(target_os = "linux")]
 const RPM_PREUN: &str = include_str!("../../../packaging/linux/rpm-preun.sh");
 const NSIS_HOOKS: &str = include_str!("../../../packaging/windows/hooks.nsh");
 const ARCH_HOOK: &str = include_str!("../../../packaging/arch/lobbylocker-reset-firewall.hook");

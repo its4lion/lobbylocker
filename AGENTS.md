@@ -7,6 +7,8 @@ blocks game server IPs via the OS firewall.
 ## Setup
 
 - Rust 1.99.1+. No Node/pnpm — the monorepo is Cargo only.
+- Linux builds link the system `libxkbcommon`, so the development package is
+  required: `libxkbcommon-dev` on Debian/Ubuntu, `libxkbcommon` on Arch.
 - Linux runtime: a Vulkan or OpenGL driver for the Rune window plus
   `nftables`, `pkexec`, and a desktop polkit agent for firewall changes.
 - Rune is pinned by git rev in the workspace `Cargo.toml`:

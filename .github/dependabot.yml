@@ -1,13 +1,5 @@
 version: 2
 updates:
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      frontend-dependencies:
-        patterns: ["*"]
-
   - package-ecosystem: cargo
     directory: /
     schedule:

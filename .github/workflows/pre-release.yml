@@ -64,6 +64,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: rustfmt
@@ -77,7 +81,7 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install system dependencies
-        run: pacman -Syu --noconfirm git pkgconf
+        run: pacman -Syu --noconfirm git pkgconf libxkbcommon
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
@@ -96,6 +100,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev
       - uses: dtolnay/rust-toolchain@1.99.1
         with:
           components: clippy
@@ -149,7 +157,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm git pkgconf rustup nftables polkit namcap
+        run: pacman -Syu --noconfirm git pkgconf libxkbcommon rustup nftables polkit namcap
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
@@ -203,7 +211,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y patchelf
+          sudo apt-get install -y patchelf libxkbcommon-dev
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - name: Apply the candidate version
@@ -260,6 +268,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - name: Apply the candidate version
@@ -333,7 +345,7 @@ jobs:
           cp target/release/lobbylocker.exe payload/lobbylocker.exe
           cp -a data payload/data
       - name: Build the installer
-        run: makensis -V4 apps\rune\windows\lobbylocker.nsi
+        run: makensis -V4 -DVERSION=${{ needs.prepare.outputs.version }} packaging/windows/lobbylocker.nsi
       - uses: actions/upload-artifact@v7
         with:
           name: windows-installer

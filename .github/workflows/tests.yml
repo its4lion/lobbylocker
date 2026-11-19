@@ -66,7 +66,7 @@ jobs:
     container: archlinux:base-devel
     steps:
       - name: Install system dependencies
-        run: pacman -Syu --noconfirm git pkgconf
+        run: pacman -Syu --noconfirm git pkgconf libxkbcommon
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
@@ -76,6 +76,10 @@ jobs:
     name: Rust / Ubuntu 24.04
     runs-on: ubuntu-24.04
     steps:
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
@@ -94,6 +98,10 @@ jobs:
     name: Headless Rune checks
     runs-on: ubuntu-24.04
     steps:
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
@@ -131,7 +139,7 @@ jobs:
           for size in ["420x800", "360x560"]:
               tree = json.load(open(f"/tmp/lobbylocker-compact-{size}.json"))
               keys = {e.get("key") for e in tree["elements"] if e.get("key")}
-              assert {"compact-game-trigger", "compact-reset", "layout-toggle"} <= keys, size
+              assert {"compact-game-trigger", "compact-reset", "compact-ping"} <= keys, size
               assert "tab-regions" not in keys, size
           EOF
       - name: Check compact window transitions
@@ -141,21 +149,23 @@ jobs:
           with tempfile.TemporaryDirectory(prefix="lobbylocker-layout-") as temp:
               root = pathlib.Path(temp)
               env = os.environ.copy()
-              env["XDG_CONFIG_HOME"] = temp
               env["LOBBYLOCKER_NO_FIREWALL"] = "1"
               script, tree = root / "actions.json", root / "tree.json"
-              for actions, compact in [
-                  ([{"t": 0.2, "type": "tap", "key": "layout-toggle"}], True),
-                  ([{"t": 0.2, "type": "tap", "key": "layout-toggle"},
-                    {"t": 0.7, "type": "tap", "key": "layout-toggle"}], False),
-              ]:
+              cases = [
+                  ("narrow", [{"t": 0.2, "type": "resize", "dw": -600, "dh": 0, "dur": 0.4}], True),
+                  ("wide", [{"t": 0.2, "type": "resize", "dw": -600, "dh": 0, "dur": 0.4},
+                            {"t": 0.9, "type": "resize", "dw": 600, "dh": 0, "dur": 0.4}], False),
+              ]
+              for name, actions, compact in cases:
+                  config = root / name
+                  config.mkdir()
+                  env["XDG_CONFIG_HOME"] = str(config)
                   script.write_text(json.dumps(actions))
-                  subprocess.run(["cargo", "run", "-q", "-p", "lobbylocker-app", "--", "--scene", "cs2", "--script", str(script), "--at", "1.2", "--tree", str(tree)], env=env, check=True)
+                  subprocess.run(["cargo", "run", "-q", "-p", "lobbylocker-app", "--", "--scene", "cs2", "--script", str(script), "--at", "1.8", "--tree", str(tree)], env=env, check=True)
                   elements = json.loads(tree.read_text())["elements"]
                   keys = {e.get("key") for e in elements}
-                  assert ("compact-picker" in keys) == compact
-                  pane = next(e for e in elements if e.get("key") == "main-pane")
-                  assert (pane["rect"][2] < 420) == compact, pane["rect"]
+                  assert ("compact-picker" in keys) == compact, name
+                  assert ("sidebar" in keys) != compact, name
           EOF
       - name: Upload snapshots
         uses: actions/upload-artifact@v7
