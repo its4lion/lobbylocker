@@ -7,7 +7,7 @@ pkgdesc="Desktop game server blocker using nftables"
 arch=('x86_64')
 url="https://github.com/its4lion/LobbyLocker"
 license=('MIT')
-depends=('vulkan-icd-loader' 'nftables' 'polkit')
+depends=('vulkan-icd-loader' 'libxkbcommon' 'nftables' 'polkit')
 options=('!debug')
 
 package() {

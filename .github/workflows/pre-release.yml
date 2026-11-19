@@ -157,7 +157,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm git pkgconf libxkbcommon rustup nftables polkit namcap
+        run: pacman -Syu --noconfirm git pkgconf libxkbcommon vulkan-icd-loader rustup nftables polkit namcap
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
@@ -204,6 +204,8 @@ jobs:
     needs: [prepare, gate]
     if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-22.04
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -226,6 +228,7 @@ jobs:
           set -euo pipefail
           AppDir="${RUNNER_TEMP}/lobbylocker.AppDir"
           install -d "${AppDir}/usr/bin"
+          install -d "${AppDir}/usr/share/lobbylocker/data"
           cp target/release/lobbylocker-app "${AppDir}/usr/bin/lobbylocker-app"
           cp target/release/lobbylocker "${AppDir}/usr/bin/lobbylocker"
           cp -a data "${AppDir}/usr/share/lobbylocker/data"
@@ -264,6 +267,8 @@ jobs:
     needs: [prepare, gate]
     if: needs.gate.outputs.allowed == 'true'
     runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -344,6 +349,9 @@ jobs:
           cp target/release/lobbylocker-app.exe payload/lobbylocker-app.exe
           cp target/release/lobbylocker.exe payload/lobbylocker.exe
           cp -a data payload/data
+      - name: Install NSIS
+        shell: pwsh
+        run: choco install nsis -y
       - name: Build the installer
         run: makensis -V4 -DVERSION=${{ needs.prepare.outputs.version }} packaging/windows/lobbylocker.nsi
       - uses: actions/upload-artifact@v7
