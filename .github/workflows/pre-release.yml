@@ -249,7 +249,7 @@ jobs:
           exec "${APP}/lobbylocker-app" "$@"
           EOF
           chmod +x "${AppDir}/AppRun"
-          curl -fLO https://github.com/AppImage/appimagetool-continuous.git/continuous/appimagetool-x86_64.AppImage
+          curl -fLO https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
           ./appimagetool-x86_64.AppImage --appimage-extract --quiet 2>/dev/null || true
           mkdir -p release-assets
@@ -353,7 +353,10 @@ jobs:
         shell: pwsh
         run: choco install nsis -y
       - name: Build the installer
-        run: makensis -V4 -DVERSION=${{ needs.prepare.outputs.version }} packaging/windows/lobbylocker.nsi
+        shell: pwsh
+        run: |
+          $env:Path = "C:\Program Files (x86)\NSIS;C:\ProgramData\chocolatey\bin;$env:Path
+          makensis -V4 -DVERSION=${{ needs.prepare.outputs.version }} packaging/windows/lobbylocker.nsi
       - uses: actions/upload-artifact@v7
         with:
           name: windows-installer
