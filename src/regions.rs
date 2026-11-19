@@ -79,17 +79,12 @@ fn block_servers_header(
         actions = actions.child(
             Button::new(t.text(label))
                 .variant(rune_kit::ButtonVariant::Ghost)
+                .disabled(s.busy.is_some())
                 .on_press(move |state: &mut AppState| {
                     if state.busy.is_none() {
                         state.busy = Some("refresh".to_string());
-                        match state.engine.refresh_game(&gid) {
-                            Ok(()) => {
-                                state.status = state.engine.runtime();
-                                state.error.clear();
-                            }
-                            Err(e) => state.error = e,
-                        }
-                        state.busy = None;
+                        state.error.clear();
+                        request_refresh(state, gid.clone());
                     }
                 })
                 .build(k),

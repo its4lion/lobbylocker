@@ -46,6 +46,7 @@ pub struct ScanDone(pub Result<Scan>);
 pub struct PingDone(pub Result<()>);
 pub struct ConnDone(pub Result<Vec<Connection>>);
 pub struct FreshDone;
+pub struct RefreshDone(pub Result<()>);
 
 /// Steam banner art, decoded off the UI thread: width, height, RGBA bytes.
 pub struct BannerDone {
@@ -147,6 +148,7 @@ pub struct AppState {
     pub ping_latest: Latest<PingDone>,
     pub conn_latest: Latest<ConnDone>,
     pub fresh_latest: Latest<FreshDone>,
+    pub refresh_latest: Latest<RefreshDone>,
     pub banner_latest: Latest<BannerDone>,
     /// Target form inputs.
     pub target_addr: TextEdit,
@@ -245,6 +247,7 @@ pub fn init_with(dirs: DataDirs) -> AppState {
         ping_latest: Latest::default(),
         conn_latest: Latest::default(),
         fresh_latest: Latest::default(),
+        refresh_latest: Latest::default(),
         banner_latest: Latest::default(),
         target_addr: TextEdit::new(""),
         target_name: TextEdit::new(""),
@@ -299,6 +302,7 @@ pub fn setup(s: &mut AppState, waker: Waker) {
     s.ping_latest.set_waker(waker.clone());
     s.conn_latest.set_waker(waker.clone());
     s.fresh_latest.set_waker(waker.clone());
+    s.refresh_latest.set_waker(waker.clone());
     s.banner_latest.set_waker(waker.clone());
     s.image_cache = Some(rune::ImageCache::new(waker));
     refresh_icons(s);
@@ -417,6 +421,21 @@ pub fn poll(s: &mut AppState, _t: f64, tx: &mut rune::Tx) -> bool {
     if s.fresh_latest.take().is_some() {
         changed = true;
         s.status = s.engine.runtime();
+    }
+    // Network refresh of the official server list; runs on a worker so the
+    // window keeps painting while the catalogue downloads.
+    if let Some(done) = s.refresh_latest.take() {
+        changed = true;
+        if s.busy.as_deref() == Some("refresh") {
+            s.busy = None;
+        }
+        match done.0 {
+            Ok(()) => {
+                s.error.clear();
+                s.status = s.engine.runtime();
+            }
+            Err(e) => s.error = e,
+        }
     }
     if let Some(done) = s.banner_latest.take() {
         changed = true;
@@ -699,6 +718,14 @@ pub fn request_fresh(s: &AppState, game_id: String) {
         let _ = engine.ensure_fresh_data(&game_id);
         FreshDone
     });
+}
+
+/// Fetch the game's official server list off the UI thread. The caller sets
+/// `busy = "refresh"`; `poll` clears it when the worker lands.
+pub fn request_refresh(s: &AppState, game_id: String) {
+    let engine = s.engine.clone();
+    s.refresh_latest
+        .request((), move |()| RefreshDone(engine.refresh_game(&game_id)));
 }
 
 pub fn reload(s: &mut AppState) {

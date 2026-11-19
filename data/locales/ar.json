@@ -252,6 +252,7 @@
     "Which apps the firewall rules cover.": "التطبيقات التي تغطيها قواعد جدار الحماية.",
     "Reading firewall…": "جارٍ قراءة جدار الحماية…",
     "Scanning connections…": "جارٍ فحص الاتصالات…",
+    "Refreshing the official list…": "جارٍ تحديث القائمة الرسمية…",
     "A snapshot of remote connections. Scan to refresh.": "لقطة للاتصالات البعيدة. افحص مجدداً للتحديث.",
     "Search address, process, or port…": "ابحث عن عنوان أو عملية أو منفذ…",
     "All": "الكل",

@@ -252,6 +252,7 @@
     "Which apps the firewall rules cover.": "Which apps the firewall rules cover.",
     "Reading firewall…": "Reading firewall…",
     "Scanning connections…": "Scanning connections…",
+    "Refreshing the official list…": "Refreshing the official list…",
     "A snapshot of remote connections. Scan to refresh.": "A snapshot of remote connections. Scan to refresh.",
     "Search address, process, or port…": "Search address, process, or port…",
     "All": "All",

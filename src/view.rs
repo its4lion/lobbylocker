@@ -601,6 +601,7 @@ fn footer_message(s: &AppState, t: &lobbylocker_core::i18n::Translator) -> Strin
             "ping" => t.text("Checking ping…").to_string(),
             "scan" => t.text("Detecting games…").to_string(),
             "connections" => t.text("Scanning connections…").to_string(),
+            "refresh" => t.text("Refreshing the official list…").to_string(),
             _ => t.text("Working…").to_string(),
         };
     }

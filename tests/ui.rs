@@ -6,6 +6,7 @@ use lobbylocker_app::state::{init_with, DataDirs, Tab};
 use lobbylocker_app::view;
 use rune::{Env, Runtime};
 use std::path::PathBuf;
+use std::time::Duration;
 
 fn installed_game(id: &str, name: &str) -> lobbylocker_core::installed::InstalledGame {
     lobbylocker_core::installed::InstalledGame {
@@ -1607,5 +1608,71 @@ fn server_card_switch_stays_inside_the_card_with_long_names() {
     assert!(
         checked >= 8,
         "expected switches in the presented cards, got {checked}"
+    );
+}
+
+/// Clicking the official-list refresh button must not block the frame loop:
+/// the work goes to a worker and `busy` is set until the worker lands.
+#[test]
+fn refresh_button_hands_work_to_a_worker() {
+    let (mut rt, _config) = cs2_runtime();
+    rt.frame(0.0);
+    let btn = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.label.as_deref() == Some("Refresh official list"))
+        .expect("the refresh button is mounted");
+    let x = btn.rect[0] + btn.rect[2] / 2.0;
+    let y = btn.rect[1] + btn.rect[3] / 2.0;
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(0.0);
+    assert_eq!(
+        rt.state.busy.as_deref(),
+        Some("refresh"),
+        "the click marks the refresh as busy"
+    );
+    assert!(
+        rt.state.refresh_latest.is_pending(),
+        "the refresh runs off the UI thread"
+    );
+    assert!(
+        rt.elements()
+            .iter()
+            .any(|e| e.text.as_deref() == Some("Refreshing the official list…")),
+        "the footer reports the refresh as running"
+    );
+    // Keep the suite offline: drop the worker's answer before it can land.
+    rt.state.refresh_latest.cancel();
+}
+
+/// A refresh that fails fast (an unknown game) clears `busy` and surfaces
+/// the error through `poll`, so the UI stays responsive in both cases.
+#[test]
+fn refresh_worker_error_clears_busy() {
+    let (mut rt, _config) = cs2_runtime();
+    rt.frame(0.0);
+    rt.state.busy = Some("refresh".to_string());
+    lobbylocker_app::state::request_refresh(&rt.state, "missing-game".to_string());
+    let mut landed = false;
+    for _ in 0..100 {
+        rt.update(|state, tx| {
+            lobbylocker_app::state::poll(state, 0.0, tx);
+        });
+        if !rt.state.refresh_latest.is_pending() {
+            landed = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(landed, "the refresh worker's answer landed");
+    assert!(
+        rt.state.busy.is_none(),
+        "the worker landing clears the busy state"
+    );
+    assert!(
+        rt.state.error.contains("Game not found"),
+        "the error surfaces, got {:?}",
+        rt.state.error
     );
 }
