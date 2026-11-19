@@ -24,12 +24,19 @@
 
 Supports **Deadlock**, **Counter-Strike 2**, **Overwatch 2**, and **Dead by Daylight**, plus custom games.
 
-<div align="center">
-    <img
-        src="docs/images/lobbylocker.png"
-        alt="LobbyLocker"
-    />
-</div>
+<p align="center">
+  <img
+    src="docs/images/lobbylocker.png"
+    alt="LobbyLocker in the expanded layout"
+    width="580"
+  />
+  &nbsp;&nbsp;
+  <img
+    src="docs/images/lobbylockercomp.png"
+    alt="LobbyLocker in the compact layout"
+    width="240"
+  />
+</p>
 
 ## Download
 
