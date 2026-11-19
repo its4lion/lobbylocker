@@ -22,8 +22,7 @@
   </p>
 </div>
 
-Supports **Deadlock**, **Counter-Strike 2**, **Overwatch 2**, and **Dead by
-Daylight**, plus custom games you add yourself.
+Supports **Deadlock**, **Counter-Strike 2**, **Overwatch 2**, and **Dead by Daylight**, plus custom games.
 
 <div align="center">
     <img
@@ -51,93 +50,74 @@ Get the latest version from [GitHub Releases](https://github.com/its4lion/LobbyL
 > sudo pacman -U ./lobbylocker-*.pkg.tar.zst
 > ```
 
-Linux needs `nftables`, `pkexec`, and a working desktop polkit agent. Windows asks
-for administrator access when it starts so it can change the firewall, and the
-builds are unsigned, so SmartScreen may warn.
+Linux needs `nftables`, `pkexec`, and a working desktop polkit agent. Windows
+builds are unsigned and may show a SmartScreen warning.
 
 > [!NOTE]
-> **Releases:** a release candidate is built as a **draft** on the
+> **Pre-releases:** a release candidate is built as a **draft** on the
 > [Releases page](https://github.com/its4lion/LobbyLocker/releases) and is
 > published only when it is ready, so a stable release is always a build you
-> have already tested. LobbyLocker does not update itself — install a newer
-> release over the old one.
+> have already tested. LobbyLocker updates by reinstalling from Releases.
 
-## How it works
+## How to use
 
-LobbyLocker writes rules into the firewall your OS already runs. Game files are
-never modified and nothing is injected into the game.
+1. Download and open LobbyLocker, then choose your game. Supported Windows games'
+   executables are detected automatically.
+2. Turn on the switches for servers or regions you **don't** want to play on.
+3. Approve the permission prompt. Switch changes apply automatically.
 
-1. Open LobbyLocker and pick a game. Installed supported games are detected from
-   local Steam and Epic metadata.
-2. Turn on the switches for the servers or regions you **don't** want to play on.
-   A region switch covers every bundled server in that region.
-3. Approve the permission prompt. Switch changes apply automatically, and blocks
-   stay active after you close the app.
+The sidebar lists detected supported games first, followed by your custom and
+other detected games. Use the scan button next to search to find newly installed games. For
+games without a bundled server list, add the server addresses yourself.
 
-Only LobbyLocker's own rules are ever touched. **Settings → Firewall → Reset**
-removes them without flushing the rest of your firewall.
+Blocks stay active after you close the app. Switch them off to unblock, or use
+**Settings → Reset** to remove them all.
 
-## What's included
+## More options
 
-- **Server and region switches** — block individual servers or a whole region.
-  Server cards show the firewall readback (**Blocked** / **Not blocked**), not
-  just the saved switch.
-- **Blocking scope (Windows)** — block the selected game executables, or every
-  app on the PC that talks to those addresses.
-- **Refresh the official list** — pull a game's current server addresses from its
-  provider feed. Endpoint IDs stay stable, so existing blocks are updated rather
-  than duplicated.
-- **Server editor** — add IPs or CIDR ranges, ports, a protocol, and a ping
-  target. **Edit mode** edits bundled servers; **Add custom game** creates your
-  own from scratch.
-- **Check ping** — ICMP probes on demand. Results never change block selections.
-- **Connections** — a read-only snapshot of current remote sockets, searchable by
-  address, process, protocol, or port. It never scans automatically.
-- **Game library** — use **Scan games** to find games installed after launch, and
-  add extra **Game library folders** in Settings for other drives.
-- **Small things** — dark mode, English and Arabic, local Steam banner art, and a
-  compact layout when the window gets narrow.
-
-## Tips
-
-- The window is responsive: drag it below 720 points wide and it switches to the
-  compact layout; widen it to go back. There is no separate toggle.
-- Windows: **Settings → Blocking** switches between **Selected games** and
-  **All apps on this PC**. All-apps blocking needs no executable and also covers
-  other apps using the same addresses.
-- Use **Settings → Game files** to point a game at its executable. Windows uses
-  that executable to scope rules; Linux rules apply system-wide.
-- Ping is an ICMP probe to the server's probe address, not in-game latency. Some
-  targets may not reply.
+- **Blocking scope (Windows):** **Settings → Blocking** offers **Selected games**
+  or **All apps on this PC**. All-apps blocking needs no executable and affects
+  other apps using the same server addresses. Apply changes to update existing
+  blocks.
+- **Compact mode:** use **Collapse app** / **Expand app** in the window header.
+  The compact view keeps the game picker and server switches in a narrow window.
+- **Ping:** use **Check ping** to check all servers with a ping target.
+  Results appear in the cards and never change blocking selections.
+  These are ICMP probe measurements, not in-game latency; some targets may not reply.
+- **Server editing:** **Edit mode** lets you add IPs and edit
+  a server's addresses and ping target.
+- **Connections:** use **Scan connections** for a read-only snapshot of remote
+  sockets, then search or filter by protocol. These connections are not verified
+  game servers; the page does not scan automatically.
 
 ## Before you play
 
 > [!WARNING]
 >
 > - **Linux blocks addresses system-wide**, which can affect other apps. Windows
->   can scope rules to the selected game executables or apply them to all apps.
-> - LobbyLocker is in beta. Server lists can go out of date, and parties or
->   relays can still put you in an unexpected region. If a match won't connect,
->   use **Reset**.
+>   can block selected game executables or all apps, as chosen in Settings.
+> - LobbyLocker is in beta. Server lists can go out of date, and parties or relays
+>   can still put you in an unexpected region. If a match won't connect, use
+>   **Reset**.
 > - Test Overwatch blocking in a custom game, not the practice range.
 
 ## FAQ
 
-| Question                         | Answer                                                                                                                                                                  |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Does it modify the game?         | No. It only writes OS firewall rules — no game files changed, no code injected.                                                                                         |
-| A blocked region still connects? | Use **Refresh official list**, toggle the affected blocks off and back on, then queue a new match.                                                                      |
-| Do I need administrator access?  | For firewall changes, yes. Windows asks when the app starts; Linux shows a polkit prompt via `pkexec`.                                                                   |
-| How do I uninstall?              | Run **Settings → Firewall → Reset** first, then uninstall or delete the AppImage. Package removal also cleans up LobbyLocker's own firewall rules.                       |
+| Question                         | Answer                                                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Does it modify the game?         | No. It uses your OS firewall — no game files changed, no code injected.                                                                                                    |
+| A blocked region still connects? | Expand the app, then use **Refresh IPs**. Toggle affected blocks off and back on, then queue a new match. |
+| How do I uninstall?              | Use **Settings → Reset**, wait for confirmation, then uninstall or delete the AppImage.                                                        |
 
 Need help or have a suggestion? [Open an issue](https://github.com/its4lion/LobbyLocker/issues).
 
 <details>
 <summary>Build from source</summary>
 
-Pure Rust: the app is a [Rune](https://github.com/anomalyco/rune) native desktop
-app over a standalone core crate — no Node, no pnpm, no webview. Install Rust
-1.99.1+ and your platform's Vulkan or OpenGL runtime for the window.
+Pure Rust: the app is a [Rune](https://github.com/anomalyco/rune) native
+desktop app over a standalone core crate — no Node, no pnpm, no webview.
+Install Rust 1.99.1+ and your platform's Vulkan or OpenGL runtime for the
+window.
 
 ```sh
 cargo run -p lobbylocker-app
@@ -151,11 +131,7 @@ cargo run -p lobbylocker-app -- --tree /tmp/tree.json --scene cs2
 cargo run -p lobbylocker-core --bin lobbylocker -- preview
 ```
 
-Scenes: `cs2`, `blocked`, `settings`, `connections`, `empty`, `reset`, `edit`,
-`edit-add`, `edit-details`, `compact`.
-
-Release versions are written with `cargo run -p bump-version -- set <version>`;
-never edit only one of `Cargo.toml` and `Cargo.lock`.
+Scenes: `cs2`, `blocked`, `settings`, `connections`, `empty`, `reset`, `edit`, `edit-add`, `edit-details`, `compact`.
 
 </details>
 
