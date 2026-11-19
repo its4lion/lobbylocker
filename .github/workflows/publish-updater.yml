@@ -28,9 +28,8 @@ jobs:
       tag: ${{ steps.resolve.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
       - name: Resolve the candidate draft
         id: resolve
         env:
@@ -76,10 +75,11 @@ jobs:
             exit 1
           fi
 
-          python3 scripts/bump-version.py set "${version}"
+          cargo build -q -p bump-version
+          target/debug/bump-version set "${version}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json Cargo.toml Cargo.lock
+          git add Cargo.toml Cargo.lock
           if ! git diff --cached --quiet; then
             git commit -m "chore: bump version to ${version}"
             git push origin "HEAD:${GITHUB_REF}"

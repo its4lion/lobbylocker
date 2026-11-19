@@ -1,0 +1,15 @@
+[package]
+name = "fetch-cloud-ranges"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "fetch-cloud-ranges"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = { workspace = true, features = ["preserve_order"] }
+reqwest.workspace = true

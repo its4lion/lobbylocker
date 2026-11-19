@@ -157,7 +157,8 @@ i18n:
   `packaging/arch/*.hook`) call `lobbylocker --reset-firewall`. They must run
   only on a real removal, never on upgrade, and must abort the uninstall if cleanup
   fails.
-- `scripts/fetch-cloud-ranges.mjs` regenerates bundled `providerScope` ranges.
+- `cargo run -p fetch-cloud-ranges` regenerates bundled `providerScope` ranges (run
+  it from the repo root).
   **Endpoint ids must stay identical to the ones the in-app refresh writes**
   (`{regionId}-{index}`), otherwise a refresh treats every bundled address as new.
 - Windows-specific behavior in `inspection` and `windows_firewall` **still needs
@@ -177,8 +178,8 @@ i18n:
   (`--reset-firewall` cleanup helper used by package hooks).
 - A `(deleted)` executable path on Linux means a rebuild replaced the binary
   under a running instance; restart the app instead of trying to make Apply work.
-- Release versions are bumped by `scripts/bump-version.py` across `package.json`,
-  `Cargo.toml`, and `Cargo.lock`. Do not hand-edit one of them alone.
+- Release versions are bumped by `cargo run -p bump-version -- set <version>`
+  across `Cargo.toml` and `Cargo.lock`. Do not hand-edit one of them alone.
 - Releasing is two manual steps. `.github/workflows/pre-release.yml` builds a
   **release candidate** (signed staged packages: Arch, DEB, AppImage, NSIS) with
   the next stable version and leaves it as a **draft**; nothing is committed to

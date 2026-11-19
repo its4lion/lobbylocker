@@ -26,9 +26,8 @@ jobs:
       sha: ${{ steps.version.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
       - name: Resolve the version
         id: version
         env:
@@ -37,6 +36,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cargo build -q -p bump-version
+          tool=target/debug/bump-version
+
           git ls-remote --tags origin 'refs/tags/v*' \
             | awk '{print $2}' \
             | sed 's#^refs/tags/##' \
@@ -46,10 +48,10 @@ jobs:
           if [[ -n "${REQUESTED_VERSION}" ]]; then
             version="${REQUESTED_VERSION}"
           else
-            version=$(python3 scripts/bump-version.py derive-stable --tags-file tags.txt)
+            version=$("${tool}" derive-stable --tags-file tags.txt)
           fi
           echo "Building candidate v${version}"
-          python3 scripts/bump-version.py set "${version}" --dry-run
+          "${tool}" set "${version}" --dry-run
 
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
@@ -147,7 +149,7 @@ jobs:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm git pkgconf rustup nftables polkit namcap python
+        run: pacman -Syu --noconfirm git pkgconf rustup nftables polkit namcap
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
@@ -157,7 +159,7 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
-        run: python3 scripts/bump-version.py set "${VERSION}"
+        run: cargo run -q -p bump-version -- set "${VERSION}"
       - name: Build release binaries
         run: cargo build --release -p lobbylocker-app -p lobbylocker-core
       - name: Build pacman package
@@ -208,7 +210,7 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
-        run: python3 scripts/bump-version.py set "${VERSION}"
+        run: cargo run -q -p bump-version -- set "${VERSION}"
       - name: Build release binaries
         run: cargo build --release -p lobbylocker-app -p lobbylocker-core
       - name: Build the AppImage
@@ -264,7 +266,7 @@ jobs:
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
-        run: python3 scripts/bump-version.py set "${VERSION}"
+        run: cargo run -q -p bump-version -- set "${VERSION}"
       - name: Build release binaries
         run: cargo build --release -p lobbylocker-app -p lobbylocker-core
       - name: Build the DEB
@@ -313,16 +315,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.prepare.outputs.sha }}
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.14"
       - uses: dtolnay/rust-toolchain@1.99.1
       - uses: Swatinem/rust-cache@v2
       - name: Apply the candidate version
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         shell: bash
-        run: python scripts/bump-version.py set "${VERSION}"
+        run: cargo run -q -p bump-version -- set "${VERSION}"
       - name: Build release binaries
         run: cargo build --release -p lobbylocker-app -p lobbylocker-core
       - name: Stage payload
