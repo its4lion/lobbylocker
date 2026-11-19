@@ -355,7 +355,7 @@ jobs:
       - name: Build the installer
         shell: pwsh
         run: |
-          $env:Path = "C:\Program Files (x86)\NSIS;C:\ProgramData\chocolatey\bin;$env:Path
+          $env:Path = "C:\Program Files (x86)\NSIS;C:\ProgramData\chocolatey\bin;$env:Path"
           makensis -V4 -DVERSION=${{ needs.prepare.outputs.version }} packaging/windows/lobbylocker.nsi
       - uses: actions/upload-artifact@v7
         with:
