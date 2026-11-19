@@ -15,7 +15,7 @@ name = "lobbylocker-app"
 path = "src/main.rs"
 
 [workspace]
-members = ["crates/core", "tools/bump-version"]
+members = ["crates/core", "tools/bump-version", "tools/sign-update"]
 default-members = ["."]
 resolver = "2"
 
@@ -56,13 +56,13 @@ uuid.workspace = true
 dirs.workspace = true
 base64.workspace = true
 image.workspace = true
+tempfile.workspace = true
 # Windows: run the app itself as administrator (requireAdministrator manifest).
 # The core crate embeds the same manifest for the cleanup CLI.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
-tempfile.workspace = true
 # Source of truth for the vendored icon set (used by the icon-parity test).
 lucide-static-svg.workspace = true
 

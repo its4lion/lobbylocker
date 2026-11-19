@@ -160,6 +160,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.custom_open {
         crate::dialogs::custom_game(s, k, &t, &mut overlays);
     }
+    crate::updates::dialog(s, k, &t, &mut overlays);
     if let Some(game) = s
         .status
         .snapshot
@@ -594,32 +595,22 @@ fn footer(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translator) -> El {
 
 /// The compact layout's release row: the update marker and the quit button.
 fn compact_release_row(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translator) -> El {
-    let update_ready = s
-        .update_notice
-        .as_ref()
-        .is_some_and(|notice| notice.available);
     let quit = Button::new(t.text("Quit LobbyLocker"))
         .variant(rune_kit::ButtonVariant::Ghost)
         .on_press_tx(|_state: &mut AppState, tx: &mut rune::Tx| tx.quit())
         .build(k)
         .key("quit-button");
-    let update = update_ready.then(|| {
+    let update = crate::updates::button(s, k, t).map(|button| {
         row()
             .gap(6.0)
             .center_y()
-            .child(
+            .children(s.update_notice.as_ref().map(|_| {
                 el().key("update-dot")
                     .size(8.0, 8.0)
                     .radius(4.0)
-                    .fill(k.c.text_accent),
-            )
-            .child(
-                Button::new(t.text("Update"))
-                    .variant(rune_kit::ButtonVariant::Outline)
-                    .on_press(|state: &mut AppState| crate::state::dismiss_update(state))
-                    .build(k)
-                    .key("update-button"),
-            )
+                    .fill(k.c.text_accent)
+            }))
+            .child(button)
     });
     let row = row()
         .w_full()

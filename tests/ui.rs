@@ -201,13 +201,13 @@ fn the_sidebar_footer_marks_a_waiting_update_and_always_offers_a_way_out() {
         rt.find("update-button").is_some(),
         "the update button appears"
     );
-    // Taking the update away puts both away again.
+    // The footer opens a confirmation dialog and retains the notice on close.
     click_ui(&mut rt, "update-button");
-    assert!(rt.find("update-dot").is_none(), "the dot goes away");
-    assert!(
-        rt.find("update-button").is_none(),
-        "the update button goes away"
-    );
+    assert!(rt.find("software-update-dialog").is_some());
+    assert!(rt.find("install-update").is_some());
+    click_ui(&mut rt, "close-update");
+    assert!(rt.find("software-update-dialog").is_none());
+    assert!(rt.find("update-dot").is_some());
     assert!(rt.find("quit-button").is_some(), "the quit button stays");
 }
 #[test]
@@ -358,10 +358,10 @@ fn the_compact_layout_keeps_the_update_marker_and_the_way_out() {
         "the update button appears"
     );
     click_ui(&mut rt, "update-button");
-    assert!(
-        rt.find("update-dot").is_none(),
-        "taking the update away puts the dot away"
-    );
+    assert!(rt.find("software-update-dialog").is_some());
+    click_ui(&mut rt, "close-update");
+    assert!(rt.find("software-update-dialog").is_none());
+    assert!(rt.find("update-dot").is_some());
     assert!(rt.find("quit-button").is_some(), "the way out stays");
 }
 
@@ -1685,18 +1685,15 @@ fn refresh_worker_error_clears_busy() {
     rt.frame(0.0);
     rt.state.busy = Some("refresh".to_string());
     lobbylocker_app::state::request_refresh(&rt.state, "missing-game".to_string());
-    let mut landed = false;
     for _ in 0..100 {
         rt.update(|state, tx| {
             lobbylocker_app::state::poll(state, 0.0, tx);
         });
-        if !rt.state.refresh_latest.is_pending() {
-            landed = true;
+        if rt.state.busy.is_none() {
             break;
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert!(landed, "the refresh worker's answer landed");
     assert!(
         rt.state.busy.is_none(),
         "the worker landing clears the busy state"

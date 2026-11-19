@@ -14,4 +14,6 @@ pub mod regions;
 pub mod settings;
 pub mod sidebar;
 pub mod state;
+mod update_install;
+mod updates;
 pub mod view;

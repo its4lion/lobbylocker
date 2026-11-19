@@ -53,6 +53,12 @@ jobs:
             echo "The candidate draft ${tag} is flagged as a prerelease." >&2
             exit 1
           fi
+          update_asset=$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+            --jq '[.assets[].name] | (index("lobbylocker-update.json") != null and index("latest.json") != null)')
+          if [[ "${update_asset}" != "true" ]]; then
+            echo "The candidate ${tag} is missing its signed update manifest. Rebuild the candidate." >&2
+            exit 1
+          fi
 
           echo "Publishing the candidate ${tag}."
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
@@ -89,7 +95,7 @@ jobs:
           # The CLI preserves tag_name when updating and publishing a draft.
           gh release edit "${TAG}" --repo "${GITHUB_REPOSITORY}" \
             --tag "${TAG}" --target "${bump_sha}" \
-            --draft=false --prerelease=false
+            --draft=false --prerelease=false --latest
 
           read -r published_tag still_draft still_prerelease <<< "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" --jq '[.tag_name, .draft, .prerelease] | @tsv')"
           if [[ "${published_tag}" != "${TAG}" || "${still_draft}" != "false" || "${still_prerelease}" != "false" ]]; then
@@ -97,3 +103,29 @@ jobs:
             exit 1
           fi
           echo "Published ${TAG} at ${bump_sha}."
+
+  publish-legacy-feed:
+    name: Refresh the feed used by v0.0.5 and v0.0.6
+    needs: publish-candidate
+    if: ${{ !cancelled() && (needs.publish-candidate.result == 'success' || inputs.tag != '') }}
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ inputs.tag || needs.publish-candidate.outputs.tag }}
+    steps:
+      - name: Upload legacy metadata from the latest stable release
+        shell: bash
+        run: |
+          set -euo pipefail
+          latest=$(gh api "repos/${GH_REPO}/releases/latest" --jq '.tag_name')
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ || "${TAG}" != "${latest}" ]]; then
+            echo "The legacy feed can only point to the latest stable release." >&2
+            exit 1
+          fi
+          gh release download "${TAG}" --pattern latest.json
+          jq -e --arg version "${TAG#v}" '.version == $version
+            and (.platforms["linux-x86_64"].signature | type == "string" and length > 0)
+            and (.platforms["windows-x86_64"].signature | type == "string" and length > 0)' latest.json >/dev/null
+          gh release upload updater latest.json --clobber
+          gh release edit updater --notes "Signed update metadata for LobbyLocker ${TAG}. Installers are available from the versioned stable release."

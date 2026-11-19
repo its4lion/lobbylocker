@@ -11,6 +11,7 @@ pub mod latency;
 mod launcher_folders;
 pub mod model;
 pub mod store;
+pub mod update;
 #[cfg(target_os = "windows")]
 mod windows_firewall;
 

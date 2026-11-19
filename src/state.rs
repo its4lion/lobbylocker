@@ -15,6 +15,8 @@ use lobbylocker_core::{
 use rune::{ImageCache, Latest, Pixels, TextEdit, Waker};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
+pub use crate::updates::UpdateNotice;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
     Regions,
@@ -165,6 +167,7 @@ pub struct AppState {
     pub scope_open: bool,
     /// A newer version to announce, when the app knows of one.
     pub update_notice: Option<UpdateNotice>,
+    pub(crate) updates: crate::updates::Updates,
     /// Switches saved before the pending apply, restored if it fails.
     pub pending_rollback: Option<Preferences>,
     /// Custom game form.
@@ -258,10 +261,9 @@ pub fn init_with(dirs: DataDirs) -> AppState {
         language_open: false,
         settings_language_open: false,
         scope_open: false,
-        // The app has no updater, so a newer build is only ever announced by
-        // an explicit override (or the preview scene).
         update_notice: std::env::var_os("LOBBYLOCKER_FAKE_UPDATE")
             .map(|version| preview_update(&version.to_string_lossy())),
+        updates: Default::default(),
         pending_rollback: None,
         custom_name_edit: TextEdit::new(""),
         custom_addr_edit: TextEdit::new(""),
@@ -272,26 +274,9 @@ pub fn init_with(dirs: DataDirs) -> AppState {
     }
 }
 
-/// A release to announce: the version, and whether it is newer than the one
-/// running.
-#[derive(Clone)]
-pub struct UpdateNotice {
-    pub version: String,
-    /// A newer version than the one running.
-    pub available: bool,
-}
-
 /// A notice for a newer version, for the preview scene and tests.
 pub fn preview_update(version: &str) -> UpdateNotice {
-    UpdateNotice {
-        version: version.to_string(),
-        available: true,
-    }
-}
-
-/// Put a known update away: the marker and its button go with it.
-pub fn dismiss_update(s: &mut AppState) {
-    s.update_notice = None;
+    UpdateNotice::Preview(version.to_string())
 }
 
 /// Decode bounded executable icons (PNG/JPEG/ICO) into pixel tiles.
@@ -304,6 +289,7 @@ pub fn setup(s: &mut AppState, waker: Waker) {
     s.fresh_latest.set_waker(waker.clone());
     s.refresh_latest.set_waker(waker.clone());
     s.banner_latest.set_waker(waker.clone());
+    crate::updates::setup(s, waker.clone());
     s.image_cache = Some(rune::ImageCache::new(waker));
     refresh_icons(s);
     if rune::is_headless() {
@@ -456,6 +442,7 @@ pub fn poll(s: &mut AppState, _t: f64, tx: &mut rune::Tx) -> bool {
         s.banner_latest
             .request_if_changed(&game_id, crate::banner_decode::load_banner);
     }
+    changed |= crate::updates::poll(s, tx);
     if changed {
         refresh_icons(s);
         tx.instant();

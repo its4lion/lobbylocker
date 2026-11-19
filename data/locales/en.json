@@ -277,6 +277,19 @@
     "No library folders found": "No library folders found",
     "Quit LobbyLocker": "Quit LobbyLocker",
     "Update": "Update",
+    "Checking for updates…": "Checking for updates…",
+    "Installing update…": "Installing update…",
+    "Restart to update": "Restart to update",
+    "Check for updates": "Check for updates",
+    "Downloading and verifying the update…": "Downloading and verifying the update…",
+    "Restart LobbyLocker": "Restart LobbyLocker",
+    "The update is installed. Restart LobbyLocker to use it.": "The update is installed. Restart LobbyLocker to use it.",
+    "Could not restart LobbyLocker.": "Could not restart LobbyLocker.",
+    "Install update": "Install update",
+    "Could not install the update.": "Could not install the update.",
+    "LobbyLocker v{version} is available.": "LobbyLocker v{version} is available.",
+    "Could not check for updates.": "Could not check for updates.",
+    "LobbyLocker is up to date.": "LobbyLocker is up to date.",
     "Open folder": "Open folder"
   }
 }

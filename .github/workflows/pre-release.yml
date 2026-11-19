@@ -231,7 +231,7 @@ jobs:
           install -d "${AppDir}/usr/share/lobbylocker/data"
           cp target/release/lobbylocker-app "${AppDir}/usr/bin/lobbylocker-app"
           cp target/release/lobbylocker "${AppDir}/usr/bin/lobbylocker"
-          cp -a data "${AppDir}/usr/share/lobbylocker/data"
+          cp -a data/games data/locales "${AppDir}/usr/share/lobbylocker/data/"
           install -Dm644 packaging/arch/lobbylocker.desktop "${AppDir}/lobbylocker.desktop"
           install -Dm644 packaging/brand/lobbylocker-icon.svg "${AppDir}/lobbylocker.svg"
           install -Dm644 packaging/brand/lobbylocker-icon.svg "${AppDir}/.DirIcon"
@@ -375,6 +375,7 @@ jobs:
       needs.build-ubuntu.result == 'success' &&
       needs.build-windows.result == 'success'
     runs-on: ubuntu-24.04
+    environment: release-signing
     permissions:
       contents: write
     env:
@@ -387,6 +388,15 @@ jobs:
         with:
           path: release-assets
           merge-multiple: true
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the release signer
+        run: cargo build --locked -p sign-update
+      - name: Sign the desktop update packages
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: target/debug/sign-update "${VERSION}" release-assets
       - name: Create checksums
         shell: bash
         run: |
@@ -411,7 +421,7 @@ jobs:
             gh release delete "${tag}" --repo "${GITHUB_REPOSITORY}" --yes
           fi
 
-          notes="Release candidate for v${VERSION}, built from commit ${RELEASE_SHA}. Publish it with the Publish workflow, or publish this draft by hand."
+          notes="Release candidate for v${VERSION}, built from commit ${RELEASE_SHA}. Use the Publish workflow so the legacy update feed is refreshed."
 
           gh release create "${tag}" release-assets/* \
             --repo "${GITHUB_REPOSITORY}" \

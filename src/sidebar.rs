@@ -135,10 +135,7 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
         .font(k.ty.caption())
         .color(k.c.text_faint);
     // A dot marks that a newer build is waiting.
-    let update_ready = s
-        .update_notice
-        .as_ref()
-        .is_some_and(|notice| notice.available);
+    let update_ready = s.update_notice.is_some();
     // The row sizes to its content, so the footer can align it to the
     // leading edge.
     let mut version_row = row().gap(6.0).center_y().child(version);
@@ -156,17 +153,8 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
         .gap(4.0)
         .child(el().w_full().h(1.0).fill(k.c.border_muted).a11y_hidden())
         .child(align(version_row).px(8.0).pt(8.0));
-    if update_ready {
-        footer = footer.child(
-            align(
-                Button::new(t.text("Update"))
-                    .variant(rune_kit::ButtonVariant::Outline)
-                    .on_press(|state: &mut AppState| dismiss_update(state))
-                    .build(k)
-                    .key("update-button"),
-            )
-            .px(8.0),
-        );
+    if let Some(update) = crate::updates::button(s, k, t) {
+        footer = footer.child(align(update).px(8.0));
     }
     footer = footer.child(
         align(

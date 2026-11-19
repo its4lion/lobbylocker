@@ -278,6 +278,19 @@
     "No library folders found": "لم يتم العثور على مجلدات مكتبات",
     "Quit LobbyLocker": "اغلاق التطبيبق",
     "Update": "تحديث",
+    "Checking for updates…": "جارٍ التحقق من التحديثات…",
+    "Installing update…": "جارٍ تثبيت التحديث…",
+    "Restart to update": "إعادة التشغيل للتحديث",
+    "Check for updates": "التحقق من التحديثات",
+    "Downloading and verifying the update…": "جارٍ تنزيل التحديث والتحقق منه…",
+    "Restart LobbyLocker": "إعادة تشغيل LobbyLocker",
+    "The update is installed. Restart LobbyLocker to use it.": "تم تثبيت التحديث. أعد تشغيل LobbyLocker لاستخدامه.",
+    "Could not restart LobbyLocker.": "تعذرت إعادة تشغيل LobbyLocker.",
+    "Install update": "تثبيت التحديث",
+    "Could not install the update.": "تعذر تثبيت التحديث.",
+    "LobbyLocker v{version} is available.": "الإصدار v{version} من LobbyLocker متاح.",
+    "Could not check for updates.": "تعذر التحقق من التحديثات.",
+    "LobbyLocker is up to date.": "لديك أحدث إصدار من LobbyLocker.",
     "Open folder": "فتح المجلد"
   }
 }

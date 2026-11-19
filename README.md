@@ -64,7 +64,15 @@ builds are unsigned and may show a SmartScreen warning.
 > **Pre-releases:** a release candidate is built as a **draft** on the
 > [Releases page](https://github.com/its4lion/LobbyLocker/releases) and is
 > published only when it is ready, so a stable release is always a build you
-> have already tested. LobbyLocker updates by reinstalling from Releases.
+> have already tested.
+
+Windows NSIS installations in the default Program Files folder and Linux
+AppImages check for signed updates at startup. Use **Check for updates** in
+the footer to check again, or **Update** when a new version is available.
+The in-app updater in v0.0.5 and v0.0.6 can upgrade Windows NSIS and AppImage
+installations to the new release. If you installed v0.0.7, upgrade once from
+Releases to get in-app updates. Update DEB and Arch installations through your
+package manager.
 
 ## How to use
 

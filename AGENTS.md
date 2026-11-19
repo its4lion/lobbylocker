@@ -202,10 +202,15 @@ i18n:
 - `--snap` scenes are deterministic: `cs2`, `blocked`, `settings`,
   `connections`, `empty`, `reset`, `edit`, `compact`, `update`. Scene fns must
   stay UI-only — never write config or firewall state.
-- There is **no updater** in the app. A newer build is announced by a dot and
-  an "Update" button in the sidebar footer (next to the version), and the
-  "Quit LobbyLocker" button lives in the same footer. `LOBBYLOCKER_FAKE_UPDATE=<version>`
-  or `--scene update` previews that state; the button only puts the notice away.
+- The Rust updater checks the stable versioned release's `lobbylocker-update.json`
+  on startup and from the footer. The candidate workflow signs the AppImage
+  and Windows NSIS installer using the existing `release-signing` environment.
+  The Publish workflow copies the stable release's `latest.json` to the
+  `updater` release for v0.0.5/v0.0.6. Keep the signing key, signed version
+  field, and legacy Windows `/UPDATE` handling compatible with those builds.
+  Only those installations offer in-app updates. Keep package replacement and
+  signature verification off the UI thread, and firewall cleanup out of updates.
+  `LOBBYLOCKER_FAKE_UPDATE=<version>` and `--scene update` preview the notice.
 - `rune::is_headless()` guards startup elevation and fresh-data refresh; a
   plain `cargo test` is NOT headless (no `--snap` args), so tests must set
   `allow_firewall = false` before toggling blocks.
