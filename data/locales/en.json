@@ -2,6 +2,8 @@
   "code": "en",
   "name": "English",
   "messages": {
+    "{game} (Beta)": "{game} (Beta)",
+    "Partial server coverage. Addresses and game ports may change.": "Partial server coverage. Addresses and game ports may change.",
     "Updates": "Updates",
     "LobbyLocker {current} → {next}": "LobbyLocker {current} → {next}",
     "Get server data": "Get server data",

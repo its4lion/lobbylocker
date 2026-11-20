@@ -6,7 +6,19 @@ use std::collections::BTreeMap;
 use crate::state::AppState;
 
 /// Built-in games that ship with server data.
-pub const BUILTIN_GAMES: [&str; 4] = ["cs2", "deadlock", "overwatch2", "dbd"];
+pub const BUILTIN_GAMES: [&str; 5] = ["cs2", "deadlock", "overwatch2", "dbd", "rocketleague"];
+
+pub(crate) fn game_display_name(
+    id: &str,
+    name: &str,
+    t: &lobbylocker_core::i18n::Translator,
+) -> String {
+    if id == "rocketleague" {
+        t.format("{game} (Beta)", &[("game", name)])
+    } else {
+        name.to_owned()
+    }
+}
 
 pub fn block_game_ids(status: &EngineRuntime) -> Vec<String> {
     let mut ids: Vec<String> = status.applied_game_ids.clone();

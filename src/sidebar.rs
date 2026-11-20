@@ -79,9 +79,10 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
             // shows its name alone.
             let subtitle = (game_block_state(&game.id, &s.status) == Some("blocked"))
                 .then(|| t.text("Blocked").to_string());
+            let name = game_display_name(&game.id, &game.name, t);
             let label = match &subtitle {
-                Some(subtitle) => format!("{}, {}", game.name, subtitle),
-                None => game.name.clone(),
+                Some(subtitle) => format!("{name}, {subtitle}"),
+                None => name.clone(),
             };
             let mut item = row()
                 .key(format!("game-{}", game.id))
@@ -102,7 +103,7 @@ pub fn game_library(s: &AppState, k: &Kit, t: &lobbylocker_core::i18n::Translato
                         .shrink()
                         .min_w(0.0)
                         .child(
-                            text(game.name.clone())
+                            text(name)
                                 .key(format!("game-name-{}", game.id))
                                 .font(rune::TextStyle::new(13.0, 500.0))
                                 .color(k.c.text_base)

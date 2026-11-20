@@ -48,6 +48,7 @@ pub(crate) fn game_executable(game: &InstalledGame) -> Option<String> {
         "cs2" => &["game/bin/win64/cs2.exe"],
         "deadlock" => &["game/bin/win64/deadlock.exe"],
         "overwatch2" => OVERWATCH_EXECUTABLES,
+        "rocketleague" => &["Binaries/Win64/RocketLeague.exe"],
         "dbd" => &["DeadByDaylight/Binaries/Win64/DeadByDaylight-Win64-Shipping.exe"],
         _ => return None,
     };
@@ -364,6 +365,7 @@ fn scan_steam_filtered(roots: &[PathBuf], excluded: &[PathBuf]) -> Scan {
                     "1422450" => "deadlock".into(),
                     "2357570" => "overwatch2".into(),
                     "381210" => "dbd".into(),
+                    "252950" => "rocketleague".into(),
                     _ => format!("steam-{app_id}"),
                 };
                 Ok(Some(InstalledGame {
@@ -606,6 +608,14 @@ fn scan_library_roots(
     scan
 }
 
+pub(crate) fn epic_game_id(app: &str) -> String {
+    if app.eq_ignore_ascii_case("Sugar") {
+        "rocketleague".into()
+    } else {
+        format!("epic-{app}")
+    }
+}
+
 fn epic_manifest(input: &str) -> Result<Option<InstalledGame>> {
     let json: serde_json::Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
     if json["bIsIncompleteInstall"].as_bool() == Some(true) {
@@ -634,7 +644,7 @@ fn epic_manifest(input: &str) -> Result<Option<InstalledGame>> {
         return Ok(None);
     }
     Ok(Some(InstalledGame {
-        id: format!("epic-{app}"),
+        id: epic_game_id(app),
         name: name.into(),
         launcher: "Epic Games".into(),
         directory,

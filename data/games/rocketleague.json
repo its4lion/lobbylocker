@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "id": "rocketleague",
+  "name": "Rocket League",
+  "source": "Observed Rocket League match reservations",
+  "updatedAt": null,
+  "note": "Partial server coverage. Addresses and game ports may change.",
+  "regions": [
+    {
+      "id": "eu1",
+      "name": "EU1",
+      "area": "Europe",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "eu3",
+      "name": "EU3",
+      "area": "Europe",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "eu5",
+      "name": "EU5",
+      "area": "Europe",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "eu7",
+      "name": "EU7",
+      "area": "Europe",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "eu9",
+      "name": "EU9",
+      "area": "Europe",
+      "probeTarget": null,
+      "endpoints": [
+        {
+          "id": "eu9-0",
+          "address": "35.180.118.19",
+          "protocol": "udp",
+          "ports": "9006",
+          "custom": false
+        },
+        {
+          "id": "eu9-1",
+          "address": "35.181.56.92",
+          "protocol": "udp",
+          "ports": "9021",
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "me1",
+      "name": "ME1",
+      "area": "Middle East",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "me2",
+      "name": "ME2",
+      "area": "Middle East",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "me3",
+      "name": "ME3",
+      "area": "Middle East",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "me4",
+      "name": "ME4",
+      "area": "Middle East",
+      "probeTarget": null,
+      "endpoints": [
+        {
+          "id": "me4-0",
+          "address": "34.18.76.248",
+          "protocol": "udp",
+          "ports": "9032",
+          "custom": false
+        },
+        {
+          "id": "me4-1",
+          "address": "34.18.83.61",
+          "protocol": "udp",
+          "ports": "9070",
+          "custom": false
+        },
+        {
+          "id": "me4-2",
+          "address": "34.18.85.109",
+          "protocol": "udp",
+          "ports": "9003",
+          "custom": false
+        },
+        {
+          "id": "me4-3",
+          "address": "34.18.90.151",
+          "protocol": "udp",
+          "ports": "9076",
+          "custom": false
+        },
+        {
+          "id": "me4-4",
+          "address": "34.18.113.181",
+          "protocol": "udp",
+          "ports": "9016",
+          "custom": false
+        },
+        {
+          "id": "me4-5",
+          "address": "34.18.113.181",
+          "protocol": "udp",
+          "ports": "9054",
+          "custom": false
+        },
+        {
+          "id": "me4-6",
+          "address": "34.18.113.181",
+          "protocol": "udp",
+          "ports": "9074",
+          "custom": false
+        },
+        {
+          "id": "me4-7",
+          "address": "34.18.122.145",
+          "protocol": "udp",
+          "ports": "9012",
+          "custom": false
+        },
+        {
+          "id": "me4-8",
+          "address": "34.18.122.145",
+          "protocol": "udp",
+          "ports": "9016",
+          "custom": false
+        },
+        {
+          "id": "me4-9",
+          "address": "34.18.135.150",
+          "protocol": "udp",
+          "ports": "9032",
+          "custom": false
+        },
+        {
+          "id": "me4-10",
+          "address": "34.18.170.156",
+          "protocol": "udp",
+          "ports": "9015",
+          "custom": false
+        },
+        {
+          "id": "me4-11",
+          "address": "34.18.170.156",
+          "protocol": "udp",
+          "ports": "9106",
+          "custom": false
+        },
+        {
+          "id": "me4-12",
+          "address": "34.18.171.134",
+          "protocol": "udp",
+          "ports": "9080",
+          "custom": false
+        },
+        {
+          "id": "me4-13",
+          "address": "34.18.176.116",
+          "protocol": "udp",
+          "ports": "9082",
+          "custom": false
+        },
+        {
+          "id": "me4-14",
+          "address": "34.18.179.149",
+          "protocol": "udp",
+          "ports": "9035",
+          "custom": false
+        },
+        {
+          "id": "me4-15",
+          "address": "34.18.185.247",
+          "protocol": "udp",
+          "ports": "9138",
+          "custom": false
+        },
+        {
+          "id": "me4-16",
+          "address": "34.18.186.159",
+          "protocol": "udp",
+          "ports": "9016",
+          "custom": false
+        },
+        {
+          "id": "me4-17",
+          "address": "34.18.193.100",
+          "protocol": "udp",
+          "ports": "9062",
+          "custom": false
+        },
+        {
+          "id": "me4-18",
+          "address": "34.18.205.184",
+          "protocol": "udp",
+          "ports": "9013",
+          "custom": false
+        },
+        {
+          "id": "me4-19",
+          "address": "34.18.212.85",
+          "protocol": "udp",
+          "ports": "9113",
+          "custom": false
+        },
+        {
+          "id": "me4-20",
+          "address": "34.18.213.16",
+          "protocol": "udp",
+          "ports": "9001",
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "me6",
+      "name": "ME6",
+      "area": "Middle East",
+      "probeTarget": null,
+      "endpoints": [
+        {
+          "id": "me6-0",
+          "address": "34.165.106.115",
+          "protocol": "udp",
+          "ports": "9061",
+          "custom": false
+        },
+        {
+          "id": "me6-1",
+          "address": "34.165.153.64",
+          "protocol": "udp",
+          "ports": "9121",
+          "custom": false
+        }
+      ]
+    },
+    {
+      "id": "use1",
+      "name": "USE1",
+      "area": "North America",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "use3",
+      "name": "USE3",
+      "area": "North America",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "usc1",
+      "name": "USC1",
+      "area": "North America",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "usw1",
+      "name": "USW1",
+      "area": "North America",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "usw3",
+      "name": "USW3",
+      "area": "North America",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "sam1",
+      "name": "SAM1",
+      "area": "South America",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "asc1",
+      "name": "ASC1",
+      "area": "Asia",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "asm1",
+      "name": "ASM1",
+      "area": "Asia",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "jpn1",
+      "name": "JPN1",
+      "area": "Asia",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "ind1",
+      "name": "IND1",
+      "area": "Asia",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "oce1",
+      "name": "OCE1",
+      "area": "Oceania",
+      "probeTarget": null,
+      "endpoints": []
+    },
+    {
+      "id": "saf1",
+      "name": "SAF1",
+      "area": "Africa",
+      "probeTarget": null,
+      "endpoints": []
+    }
+  ]
+}

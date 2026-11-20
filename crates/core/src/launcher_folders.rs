@@ -89,7 +89,7 @@ fn epic(directory: &Path) -> Option<InstalledGame> {
             continue;
         };
         return Some(InstalledGame {
-            id: format!("epic-{app}"),
+            id: crate::installed::epic_game_id(app),
             name: folder_name(directory)?,
             launcher: "Epic".into(),
             directory: directory.to_owned(),

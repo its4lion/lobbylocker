@@ -25,6 +25,7 @@ pub fn steam_app_id(game_id: &str) -> Option<u32> {
         "deadlock" => Some(1_422_450),
         "overwatch2" => Some(2_357_570),
         "dbd" => Some(381_210),
+        "rocketleague" => Some(252_950),
         other => other
             .strip_prefix("steam-")
             .and_then(|id| id.parse::<u32>().ok())

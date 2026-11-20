@@ -66,7 +66,7 @@ fn block_servers_header(
                     .key("compact-ping"),
             );
     }
-    let refreshable = BUILTIN_GAMES.contains(&game.id.as_str());
+    let refreshable = lobbylocker_core::catalogue::has_official_feed(&game.id);
     let has_targets = game.regions.iter().any(|r| !r.endpoints.is_empty());
     let mut actions = row().gap(6.0).center_y();
     if refreshable {
@@ -147,15 +147,19 @@ fn game_header(s: &AppState, game: &Game, k: &Kit, t: &lobbylocker_core::i18n::T
             .min_w(0.0)
             .gap(2.0)
             .child(
-                text(game.name.clone())
+                text(game_display_name(&game.id, &game.name, t))
                     .key("game-name")
                     .font(rune::TextStyle::new(20.0, 600.0))
                     .color(title_color),
             )
             .child(
                 text(
-                    t.text("Choose which servers to block, individually or by region.")
-                        .to_string(),
+                    t.text(if game.id == "rocketleague" {
+                        "Partial server coverage. Addresses and game ports may change."
+                    } else {
+                        "Choose which servers to block, individually or by region."
+                    })
+                    .to_string(),
                 )
                 .font(rune::tok::type_::BODY)
                 .color(sub_color)
@@ -391,11 +395,11 @@ pub fn toggle_region(s: &mut AppState, game_id: &str, region_id: &str) {
         None => return,
     };
     let region = match game.regions.iter().find(|r| r.id == region_id) {
-        Some(r) => r.clone(),
-        None => return,
+        Some(r) if region_available(r) => r,
+        _ => return,
     };
     let key = region_key(game_id, region_id);
-    let checked = region_checked(&game, &region, &s.status.snapshot.preferences);
+    let checked = region_checked(&game, region, &s.status.snapshot.preferences);
     let previous = s.status.snapshot.preferences.clone();
     let mut prefs = previous.clone();
     prefs.blocked_regions = toggle_keys(&prefs.blocked_regions, &[key], !checked);

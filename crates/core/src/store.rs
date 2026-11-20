@@ -17,7 +17,11 @@ pub struct Store {
 /// Launcher-scoped ids that later gained a bundled game file. An upgraded
 /// profile keeps the old placeholder forever, which would hide the bundled
 /// data and keep asking the user for server addresses.
-const RENAMED_LAUNCHER_GAMES: &[(&str, &str)] = &[("steam-381210", "dbd")];
+const RENAMED_LAUNCHER_GAMES: &[(&str, &str)] = &[
+    ("steam-381210", "dbd"),
+    ("steam-252950", "rocketleague"),
+    ("epic-Sugar", "rocketleague"),
+];
 
 /// Last background refresh per game, so opening a game page does not hit the
 /// official feed more than once a day. Only timestamps are stored here; the
@@ -270,6 +274,7 @@ impl Store {
             "deadlock" => 1,
             "overwatch2" => 2,
             "dbd" => 3,
+            "rocketleague" => 4,
             _ => 4,
         });
         let preferences = Preferences::from_json(

@@ -2,6 +2,8 @@
   "code": "ar",
   "name": "العربية",
   "messages": {
+    "{game} (Beta)": "{game} (تجريبي)",
+    "Partial server coverage. Addresses and game ports may change.": "تغطية جزئية للخوادم. قد تتغير العناوين ومنافذ اللعبة.",
     "Updates": "التحديثات",
     "LobbyLocker {current} → {next}": "LobbyLocker {current} → {next}",
     "Get server data": "تنزيل بيانات الخوادم",

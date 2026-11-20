@@ -286,10 +286,11 @@ fn compact_game_picker(
     let disabled = games.is_empty() || s.busy.is_some();
     let selected = games.iter().find(|game| game.id == s.selected);
     let name = |game: &LibraryCandidate| {
+        let name = game_display_name(&game.id, &game.name, t);
         if games.iter().filter(|other| other.name == game.name).count() > 1 {
-            format!("{} ({})", game.name, game.id)
+            format!("{name} ({})", game.id)
         } else {
-            game.name.clone()
+            name
         }
     };
     let current = selected.map(name);

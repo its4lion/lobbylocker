@@ -67,6 +67,42 @@ fn cs2_runtime_at(
 }
 
 #[test]
+fn rocket_league_shows_beta_and_observed_groups() {
+    for size in [(1240.0, 860.0), (360.0, 560.0)] {
+        let (mut rt, _config) = cs2_runtime_at(size);
+        rt.state
+            .scan
+            .games
+            .push(installed_game("rocketleague", "Rocket League"));
+        rt.state.selected = "rocketleague".into();
+        rt.state.compact = size.0 < 720.0;
+        rt.frame(0.0);
+        assert!(rt
+            .elements()
+            .iter()
+            .any(|element| { element.text.as_deref() == Some("Rocket League (Beta)") }));
+        for group in [
+            "asc1", "asm1", "eu1", "eu3", "eu5", "eu7", "eu9", "ind1", "jpn1", "me1", "me2", "me3",
+            "me4", "me6", "oce1", "saf1", "sam1", "usc1", "use1", "use3", "usw1", "usw3",
+        ] {
+            assert!(rt.find(&format!("server-{group}")).is_some());
+        }
+        assert!(rt
+            .elements()
+            .iter()
+            .any(|element| { element.text.as_deref() == Some("No targets configured") }));
+        lobbylocker_app::regions::toggle_region(&mut rt.state, "rocketleague", "eu1");
+        assert!(rt
+            .state
+            .status
+            .snapshot
+            .preferences
+            .blocked_regions
+            .is_empty());
+    }
+}
+
+#[test]
 fn regions_page_shows_the_steam_banner() {
     let (mut rt, _config) = cs2_runtime();
     rt.frame(0.0);
