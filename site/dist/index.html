@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#070707">
+  <meta name="description" content="LobbyLocker helps you block unwanted game server regions with your system firewall. Available for Windows and Linux.">
+  <meta property="og:title" content="LobbyLocker">
+  <meta property="og:description" content="Block unwanted game server regions with LobbyLocker.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+  <script type="module" src="footer-effect.js"></script>
+  <title>LobbyLocker</title>
+</head>
+<body>
+  <main class="page" id="top">
+    <header class="header">
+      <a class="brand" href="#top" aria-label="LobbyLocker home"><img src="lockup.svg" alt="" width="135" height="40"></a>
+      <a class="github" id="github-stars-link" href="https://github.com/its4lion/LobbyLocker" aria-label="LobbyLocker on GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .8a11.2 11.2 0 0 0-3.54 21.83c.56.1.77-.24.77-.54v-2.17c-3.13.68-3.79-1.33-3.79-1.33-.51-1.3-1.25-1.65-1.25-1.65-1.02-.7.08-.69.08-.69 1.13.08 1.72 1.16 1.72 1.16 1 1.72 2.63 1.22 3.27.93.1-.72.39-1.22.7-1.5-2.5-.28-5.14-1.25-5.14-5.56 0-1.23.44-2.23 1.15-3.02-.12-.28-.5-1.43.11-2.98 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.61 1.55.23 2.7.11 2.98.72.79 1.15 1.79 1.15 3.02 0 4.32-2.64 5.27-5.15 5.55.4.35.76 1.04.76 2.1v3.16c0 .3.2.65.77.54A11.2 11.2 0 0 0 12 .8Z"/></svg><span class="github-name">GitHub</span><svg class="github-star" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="m8 .8 2.12 4.3 4.74.69-3.43 3.34.81 4.72L8 11.62l-4.24 2.23.81-4.72L1.14 5.79l4.74-.69z"/></svg><span id="github-stars" hidden></span></a>
+    </header>
+
+    <div class="show">
+      <figure class="app-preview">
+        <img class="app-screenshot" src="lobbylocker.png" alt="LobbyLocker showing game server regions and blocking switches" width="1237" height="860">
+      </figure>
+    </div>
+
+    <section class="hero" aria-labelledby="headline">
+      <div class="hero-copy"><h1 id="headline">Choose where you play.</h1><p>Block unwanted game server regions with your system firewall. Pick a game, choose the regions, and get back to playing.</p></div>
+      <section class="downloads" aria-label="Download LobbyLocker">
+        <div class="os-switch" role="group" aria-label="Operating system" hidden><button type="button" data-os-choice="windows" aria-pressed="true">Windows</button><button type="button" data-os-choice="linux" aria-pressed="false">Linux</button></div>
+        <div class="download-stack">
+          <div class="download-panel" data-os-panel="windows">
+          <div class="download-row"><span class="download-label">Windows</span><span class="download-info">Windows 11 · Installer (.exe)</span><a class="download-button" data-download="windows" href="https://github.com/its4lion/lobbylocker/releases/download/v0.0.11/LobbyLocker-0.0.11.exe">Download</a></div>
+          </div>
+          <div class="download-panel" data-os-panel="linux">
+            <div class="download-row"><span class="download-label">Ubuntu</span><span class="download-info">Ubuntu 24.04 · DEB package</span><a class="download-button" data-download="deb" data-accessible-label="Download Ubuntu DEB package" href="https://github.com/its4lion/lobbylocker/releases/download/v0.0.11/release-assets-lobbylocker_0.0.11_amd64.deb">Download</a></div>
+            <div class="download-row"><span class="download-label">Arch Linux</span><span class="download-info">Arch package (.pkg.tar.zst)</span><a class="download-button" data-download="arch" data-accessible-label="Download Arch package" href="https://github.com/its4lion/lobbylocker/releases/download/v0.0.11/lobbylocker-0.0.11-1-x86_64.pkg.tar.zst">Download</a></div>
+            <div class="download-row"><span class="download-label">AppImage</span><span class="download-info">Other compatible Linux systems</span><a class="download-button" data-download="appimage" data-accessible-label="Download AppImage" href="https://github.com/its4lion/lobbylocker/releases/download/v0.0.11/LobbyLocker-0.0.11-x86_64.AppImage">Download</a></div>
+          </div>
+        </div>
+        <div class="download-notes">
+          <p class="download-caption" data-os-note="windows">Windows builds may show a SmartScreen warning.</p>
+          <p class="download-caption" data-os-note="linux">Linux blocks system-wide and requires nftables, pkexec, and a desktop polkit agent.</p>
+        </div>
+        <p class="download-caption">Free and open source · <span id="release-version">v0.0.11</span></p>
+      </section>
+    </section>
+  </main>
+  <footer class="footer"><div class="footer-dotmatrix"><canvas id="footer-particles" aria-hidden="true"></canvas><span class="footer-wordmark" aria-hidden="true">LobbyLocker</span><nav class="footer-links" aria-label="Footer"><span>LobbyLocker</span> · <a href="https://github.com/its4lion/LobbyLocker/issues">Issues</a> · <a href="https://github.com/its4lion/LobbyLocker/blob/main/LICENSE">MIT License</a></nav></div></footer>
+</body>
+</html>
