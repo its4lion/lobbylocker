@@ -142,6 +142,8 @@ fn main() {
     if let Some(code) = lobbylocker_core::firewall::helper_entry() {
         std::process::exit(code);
     }
+    #[cfg(target_os = "windows")]
+    rune::set_app_icon_resource(101); // Embedded by packaging/windows/app-manifest.rc.
     rune::set_app_id("lobbylocker");
     rune::run(rune::AppSpec {
         scenes: &[

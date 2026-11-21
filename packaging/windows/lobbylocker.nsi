@@ -14,6 +14,8 @@ OutFile "../../release-assets/LobbyLocker-${VERSION}.exe"
 
 Name "LobbyLocker"
 BrandingText "LobbyLocker"
+Icon "../brand/lobbylocker.ico"
+UninstallIcon "../brand/lobbylocker.ico"
 Page instfiles
 
 Var UpdatePID
@@ -131,6 +133,7 @@ Section "Install"
   ${EndIf}
   WriteRegStr HKLM "Software\LobbyLocker" "InstallDir" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\LobbyLocker" "DisplayName" "LobbyLocker"
+  WriteRegStr HKLM "${UNINSTALL_KEY}" "DisplayIcon" '"$INSTDIR\lobbylocker-app.exe",0'
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\LobbyLocker" "DisplayVersion" "${VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\LobbyLocker" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   DeleteRegValue HKLM "${UNINSTALL_KEY}" "MainBinaryName"
