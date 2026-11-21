@@ -12,6 +12,8 @@
 
   <p>
     <a href="https://github.com/its4lion/LobbyLocker/releases/latest"><strong>Download for Windows or Linux</strong></a>
+    &nbsp;·&nbsp;
+    <a href="https://lobbylocker.its4lion.dev/">Website</a>
   </p>
 
   <p>

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://lobbylocker.its4lion.dev/sitemap.xml
