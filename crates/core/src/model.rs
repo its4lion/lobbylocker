@@ -318,6 +318,10 @@ pub struct FirewallTarget {
 pub struct FirewallRule {
     pub endpoint: Endpoint,
     pub program: Option<String>,
+    /// Catalogue grouping for native Windows rules. The Linux helper only
+    /// needs the individual targets and keeps its existing wire format.
+    #[serde(skip)]
+    pub region: Option<(String, String)>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -466,6 +470,7 @@ pub fn resolve_rules_for_scope(
                         rules.push(FirewallRule {
                             endpoint: rule,
                             program: program.clone(),
+                            region: Some((game.id.clone(), region.id.clone())),
                         });
                     }
                 }

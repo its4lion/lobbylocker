@@ -176,7 +176,7 @@ impl Engine {
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect();
-        state.applied_count = Some(report.rules.len());
+        state.applied_count = Some(report.native_rule_count.unwrap_or(report.rules.len()));
         state.applied_targets = Some(targets);
         state.pending_baseline = PendingKeys::Resolved(report.keys());
         state.inspected_at = Some(
@@ -235,6 +235,7 @@ impl Engine {
                     .map(move |endpoint| FirewallRule {
                         endpoint,
                         program: target.executable_path.clone(),
+                        region: None,
                     })
             })
             .collect::<Vec<_>>();

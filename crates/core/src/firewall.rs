@@ -8,6 +8,9 @@ use crate::{
 #[cfg(target_os = "linux")]
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+#[cfg(any(target_os = "windows", test))]
+use std::collections::BTreeSet;
 #[cfg(target_os = "linux")]
 use std::process::Command;
 #[cfg(target_os = "linux")]
@@ -111,6 +114,7 @@ pub(crate) fn windows_rule_plan(request: &Request) -> Result<Vec<WindowsRuleSpec
     };
     let generation = uuid::Uuid::new_v4().simple().to_string();
     let mut plan = Vec::new();
+    let mut groups = BTreeMap::<_, Vec<(String, String)>>::new();
     let mut identifiers = std::collections::HashSet::new();
     for rule in rules {
         if !identifiers.insert(rule.endpoint.id.to_ascii_lowercase()) {
@@ -127,6 +131,13 @@ pub(crate) fn windows_rule_plan(request: &Request) -> Result<Vec<WindowsRuleSpec
             (Protocol::Udp, _) => &[(17, "UDP")],
         };
         for (protocol, suffix) in protocols {
+            if let Some(region) = &rule.region {
+                groups
+                    .entry((region, program.clone(), *protocol, *suffix, ports.clone()))
+                    .or_default()
+                    .push((address.clone(), endpoint.id.clone()));
+                continue;
+            }
             plan.push(WindowsRuleSpec {
                 name: format!("LobbyLocker.{generation}.{}.{suffix}", endpoint.id),
                 source_id: endpoint.id.clone(),
@@ -137,13 +148,51 @@ pub(crate) fn windows_rule_plan(request: &Request) -> Result<Vec<WindowsRuleSpec
             });
         }
     }
+    const ADDRESSES_PER_RULE: usize = 100;
+    for ((_, program, protocol, suffix, ports), mut addresses) in groups {
+        addresses.sort_unstable();
+        for batch in addresses.chunks(ADDRESSES_PER_RULE) {
+            let index = plan.len();
+            let source_id = &batch[0].1;
+            plan.push(WindowsRuleSpec {
+                name: format!("LobbyLocker.{generation}.Batch.{index}.{source_id}.{suffix}"),
+                source_id: source_id.clone(),
+                program: program.clone(),
+                address: batch
+                    .iter()
+                    .map(|(address, _)| address.as_str())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                protocol,
+                ports: ports.clone(),
+            });
+        }
+    }
     Ok(plan)
+}
+
+#[cfg(any(target_os = "windows", test))]
+impl WindowsRuleSpec {
+    fn keys(&self) -> Result<BTreeSet<inspection::RuleKey>> {
+        inspection::windows_rule_keys(&serde_json::json!({
+            "address": self.address,
+            "protocol": self.protocol,
+            "ports": self.ports.as_deref().unwrap_or("Any"),
+            "program": self.program,
+        }))
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+pub(crate) struct ManagedWindowsRule {
+    pub name: String,
+    pub keys: Option<BTreeSet<inspection::RuleKey>>,
 }
 
 /// Narrow interface shared by the native policy store and fault-injected tests.
 #[cfg(any(target_os = "windows", test))]
 pub(crate) trait WindowsRuleStore {
-    fn managed_names(&mut self) -> Result<Vec<String>>;
+    fn managed_rules(&mut self, read_filters: bool) -> Result<Vec<ManagedWindowsRule>>;
     fn add(&mut self, rule: &WindowsRuleSpec) -> Result<()>;
     fn remove(&mut self, name: &str) -> Result<()>;
 }
@@ -153,18 +202,39 @@ pub(crate) fn replace_windows_rules(
     store: &mut impl WindowsRuleStore,
     plan: &[WindowsRuleSpec],
 ) -> Result<()> {
-    let old = store.managed_names()?;
-    let mut expected: Vec<_> = plan.iter().map(|rule| rule.name.to_lowercase()).collect();
-    expected.sort();
-    if expected.windows(2).any(|names| names[0] == names[1])
-        || old
+    let old = store.managed_rules(!plan.is_empty())?;
+    let mut name_counts = BTreeMap::new();
+    for rule in &old {
+        *name_counts.entry(rule.name.to_lowercase()).or_insert(0) += 1;
+    }
+    let planned_names: BTreeSet<_> = plan.iter().map(|rule| rule.name.to_lowercase()).collect();
+    if planned_names.len() != plan.len()
+        || planned_names
             .iter()
-            .any(|name| expected.binary_search(&name.to_lowercase()).is_ok())
+            .any(|name| name_counts.contains_key(name))
     {
         return Err("Duplicate or colliding Windows firewall rule names.".into());
     }
-    let mut created: Vec<&str> = Vec::new();
+    let mut reusable = BTreeMap::new();
+    for rule in &old {
+        if let Some(keys) = &rule.keys {
+            let name = rule.name.to_lowercase();
+            if name_counts[&name] == 1 {
+                reusable.insert(keys, name);
+            }
+        }
+    }
+    let mut retained = BTreeSet::new();
+    let mut additions = Vec::new();
     for rule in plan {
+        if let Some(name) = reusable.remove(&rule.keys()?) {
+            retained.insert(name);
+        } else {
+            additions.push(rule);
+        }
+    }
+    let mut created: Vec<&str> = Vec::new();
+    for rule in additions {
         if let Err(error) = store.add(rule) {
             let mut cleanup_errors = Vec::new();
             for name in created.iter().rev() {
@@ -183,18 +253,26 @@ pub(crate) fn replace_windows_rules(
         }
         created.push(rule.name.as_str());
     }
-    // Keep the old generation until every replacement exists. If removing old
-    // rules fails, retain the complete new generation and report the actual OS
-    // snapshot rather than rolling back protection after a partial deletion.
-    for name in old {
+    // Keep existing protection until every addition succeeds. If removal fails,
+    // leave the additions in place and report the actual OS snapshot.
+    for rule in old {
+        let name = rule.name;
+        if retained.contains(&name.to_lowercase()) {
+            continue;
+        }
         store.remove(&name).map_err(|error| {
             format!("Could not remove an old LobbyLocker rule: {error}. Firewall state must be verified before retrying.")
         })?;
     }
-    let mut remaining: Vec<_> = store
-        .managed_names()?
+    let mut expected: Vec<_> = retained
         .into_iter()
-        .map(|name| name.to_lowercase())
+        .chain(created.into_iter().map(str::to_lowercase))
+        .collect();
+    expected.sort();
+    let mut remaining: Vec<_> = store
+        .managed_rules(false)?
+        .into_iter()
+        .map(|rule| rule.name.to_lowercase())
         .collect();
     remaining.sort();
     if remaining != expected {

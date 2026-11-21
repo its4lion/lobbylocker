@@ -165,12 +165,19 @@ pub struct ObservedRule {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Inspection {
     pub rules: Vec<ObservedRule>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_rule_count: Option<usize>,
 }
 
 impl Inspection {
     pub fn validate(&self) -> Result<()> {
         if self.rules.len() > 10000 {
             return Err("Too many observed firewall rules.".into());
+        }
+        if let Some(count) = self.native_rule_count {
+            if count > self.rules.len() || (count == 0) != self.rules.is_empty() {
+                return Err("Invalid native firewall rule count.".into());
+            }
         }
         for rule in &self.rules {
             if address_key(&rule.key.address)? != rule.key.address {
@@ -283,6 +290,7 @@ fn endpoint_keys(
         } else {
             None
         },
+        region: None,
     }])
 }
 
@@ -752,7 +760,10 @@ pub fn linux_snapshot(json: &Value) -> Result<Inspection> {
     if !table || !chain {
         return Err("Incomplete LobbyLocker firewall table.".into());
     }
-    let report = Inspection { rules };
+    let report = Inspection {
+        rules,
+        native_rule_count: None,
+    };
     report.validate()?;
     Ok(report)
 }
@@ -781,6 +792,51 @@ pub fn windows_keys(json: &Value) -> Result<BTreeSet<RuleKey>> {
         .keys())
 }
 
+#[cfg(any(target_os = "windows", test))]
+pub(crate) fn windows_rule_keys(json: &Value) -> Result<BTreeSet<RuleKey>> {
+    let rule: WindowsRule = serde_json::from_value(json.clone()).map_err(|e| e.to_string())?;
+    Ok(rule
+        .into_observed()?
+        .into_iter()
+        .map(|rule| rule.key)
+        .collect())
+}
+
+impl WindowsRule {
+    fn into_observed(self) -> Result<Vec<ObservedRule>> {
+        if self.address.split(',').take(10_001).count() > 10_000 {
+            return Err("Too many firewall addresses to verify.".into());
+        }
+        let ports = if self.ports.eq_ignore_ascii_case("any") {
+            None
+        } else {
+            parse_ports(&Some(self.ports))?
+        };
+        let protocol = protocol(&self.protocol)?;
+        let program = self
+            .program
+            .filter(|p| !p.eq_ignore_ascii_case("any"))
+            .as_deref()
+            .map(windows_program)
+            .transpose()?
+            .map(|p| p.to_lowercase());
+        self.address
+            .split(',')
+            .map(|address| {
+                Ok(ObservedRule {
+                    source_id: self.source_id.clone(),
+                    key: RuleKey {
+                        address: windows_address_key(address)?,
+                        protocol: protocol.clone(),
+                        ports,
+                        program: program.clone(),
+                    },
+                })
+            })
+            .collect()
+    }
+}
+
 pub fn windows_snapshot(json: &Value) -> std::result::Result<Inspection, ReadbackFailure> {
     let report: WindowsReport = serde_json::from_value(json.clone()).map_err(|e| e.to_string())?;
     if !report.supported {
@@ -795,37 +851,18 @@ pub fn windows_snapshot(json: &Value) -> std::result::Result<Inspection, Readbac
             issue: Some(VerificationIssue::FirewallUnavailable),
         });
     }
-    if report.rules.len() > 10000 {
-        return Err("Too many firewall rules to verify.".into());
+    let native_rule_count = Some(report.rules.len());
+    let mut rules = Vec::new();
+    for rule in report.rules {
+        rules.extend(rule.into_observed()?);
+        if rules.len() > 10_000 {
+            return Err("Too many firewall rules to verify.".into());
+        }
     }
-    let rules = report
-        .rules
-        .into_iter()
-        .map(|rule| {
-            let ports = if rule.ports.eq_ignore_ascii_case("any") {
-                None
-            } else {
-                Some(rule.ports)
-            };
-            Ok(ObservedRule {
-                source_id: rule.source_id,
-                key: RuleKey {
-                    address: windows_address_key(&rule.address)?,
-                    protocol: protocol(&rule.protocol)?,
-                    ports: parse_ports(&ports)?,
-                    program: rule
-                        .program
-                        .filter(|p| !p.eq_ignore_ascii_case("any"))
-                        .as_deref()
-                        .map(windows_program)
-                        .transpose()?
-                        .map(|p| p.to_lowercase()),
-                },
-            })
-        })
-        .collect::<Result<Vec<_>>>()
-        .map_err(ReadbackFailure::other)?;
-    let snapshot = Inspection { rules };
+    let snapshot = Inspection {
+        rules,
+        native_rule_count,
+    };
     snapshot.validate().map_err(ReadbackFailure::other)?;
     Ok(snapshot)
 }

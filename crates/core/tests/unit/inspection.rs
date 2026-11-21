@@ -12,6 +12,7 @@ fn expected(program: Option<&str>) -> Vec<FirewallRule> {
             custom: false,
         },
         program: program.map(str::to_owned),
+        region: None,
     }]
 }
 fn nft() -> Value {
@@ -128,6 +129,24 @@ fn windows_invalid_addresses_fail_the_entire_readback_instead_of_skipping_rules(
     assert!(windows_snapshot(&json).is_err());
     json["supported"] = json!(true);
     json["enforced"] = json!(false);
+    assert!(windows_snapshot(&json).is_err());
+}
+
+#[test]
+fn windows_expands_batched_addresses_and_counts_the_native_rule_once() {
+    let mut json = windows();
+    json["rules"][0]["address"] = json!("185.25.183.163, 64.224.26.0/255.255.254.0,2001:db8::/64");
+    let report = windows_snapshot(&json).unwrap();
+    assert_eq!(report.native_rule_count, Some(1));
+    assert_eq!(
+        report
+            .rules
+            .iter()
+            .map(|rule| rule.key.address.as_str())
+            .collect::<Vec<_>>(),
+        ["185.25.183.163/32", "64.224.26.0/23", "2001:db8::/64"]
+    );
+    json["rules"][0]["address"] = json!("185.25.183.163,Any");
     assert!(windows_snapshot(&json).is_err());
 }
 #[test]

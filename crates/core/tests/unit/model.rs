@@ -159,6 +159,7 @@ fn program_availability_is_checked_without_executing_it() {
     let rule = FirewallRule {
         endpoint: game.regions[0].endpoints[0].clone(),
         program: Some(path.to_str().unwrap().into()),
+        region: None,
     };
     assert!(validate_program_files(std::slice::from_ref(&rule)).is_err());
     std::fs::write(path, b"not executed").unwrap();

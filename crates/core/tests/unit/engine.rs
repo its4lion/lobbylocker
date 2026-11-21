@@ -16,6 +16,7 @@ fn fixture_rules(games: &[Game], preferences: &Preferences) -> Inspection {
                     })
             })
             .collect(),
+        native_rule_count: None,
     }
 }
 
@@ -47,6 +48,7 @@ fn invalid_imported_programs_do_not_hide_new_edits_behind_the_same_error() {
             custom: false,
         },
         program: Some("old-linux-path".into()),
+        region: None,
     };
     let baseline = Engine::pending_rules(&[rule.clone()]);
     assert!(matches!(baseline, PendingKeys::Invalid(_)));

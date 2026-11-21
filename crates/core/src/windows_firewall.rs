@@ -1,9 +1,8 @@
-//! Native Windows Firewall access. The structured helper supplies elevation;
-//! neither inspection nor mutation starts a shell or another firewall tool.
+//! Native Windows Firewall access from the administrator process.
 use crate::{
     firewall::{
-        replace_windows_rules, windows_rule_plan, Request, WindowsRuleSpec, WindowsRuleStore,
-        WINDOWS_GROUP,
+        replace_windows_rules, windows_rule_plan, ManagedWindowsRule, Request, WindowsRuleSpec,
+        WindowsRuleStore, WINDOWS_GROUP,
     },
     inspection::{
         self, Inspection, InspectionError, InspectionResult, VerificationIssue, MAX_READBACK_BYTES,
@@ -230,9 +229,29 @@ fn create_rule(spec: &WindowsRuleSpec) -> InspectionResult<INetFwRule> {
 struct NativeStore(INetFwRules);
 
 impl WindowsRuleStore for NativeStore {
-    fn managed_names(&mut self) -> Result<Vec<String>> {
+    fn managed_rules(&mut self, read_filters: bool) -> Result<Vec<ManagedWindowsRule>> {
         owned_rules(&self.0, true)
-            .map(|rules| rules.into_iter().map(|rule| rule.name).collect())
+            .map(|rules| {
+                rules
+                    .into_iter()
+                    .map(|rule| {
+                        // Older per-address rules are migrated on the next Apply.
+                        // Keep a batch only if its live filters match the plan.
+                        let keys = if read_filters && rule.name.split('.').nth(2) == Some("Batch") {
+                            rule_row(&rule)
+                                .ok()
+                                .flatten()
+                                .and_then(|row| inspection::windows_rule_keys(&row).ok())
+                        } else {
+                            None
+                        };
+                        ManagedWindowsRule {
+                            name: rule.name,
+                            keys,
+                        }
+                    })
+                    .collect()
+            })
             .map_err(|error| error.to_string())
     }
 
@@ -289,8 +308,6 @@ impl WindowsRuleStore for NativeStore {
 
 pub(crate) fn execute(request: &Request) -> Result<()> {
     let plan = windows_rule_plan(request)?;
-    // Revalidate inside the privileged helper before creating or deleting any
-    // rules. It receives structured input, never paths from an unvalidated shell.
     if let Request::Apply { rules } = request {
         crate::model::validate_program_files(rules)?;
     }
@@ -447,6 +464,12 @@ fn source_id(name: &str) -> Option<String> {
     let mut segments = name.strip_prefix("LobbyLocker.")?.split('.');
     let transaction = segments.next()?;
     let id = segments.next()?;
+    let id = if id == "Batch" && segments.clone().count() == 3 {
+        segments.next()?.parse::<usize>().ok()?;
+        segments.next()?
+    } else {
+        id
+    };
     let protocol = segments.next()?;
     if transaction.len() != 32
         || !transaction.bytes().all(|b| b.is_ascii_hexdigit())
@@ -620,6 +643,10 @@ mod tests {
             source_id("LobbyLocker: legacy-game-eu"),
             Some("legacy-game-eu".into())
         );
+        assert_eq!(
+            source_id(&format!("LobbyLocker.{generation}.Batch.0.game-eu.TCP")),
+            Some("game-eu".into())
+        );
         for name in [
             format!("Other.{generation}.game-eu.TCP"),
             "LobbyLocker.invalid.game-eu.TCP".into(),
@@ -677,6 +704,35 @@ mod tests {
         };
         let row = rule_row(&owned).unwrap().unwrap();
         assert!(row["program"].is_null());
+        assert_eq!(row["sourceId"], "game-eu");
+    }
+
+    #[test]
+    fn batched_addresses_round_trip_through_a_native_rule() {
+        let _apartment = Apartment::enter().unwrap();
+        let spec = WindowsRuleSpec {
+            name: "LobbyLocker.0123456789abcdef0123456789abcdef.Batch.0.game-eu.Any".into(),
+            source_id: "game-eu".into(),
+            program: Some(r"C:\Games\Example\game.exe".into()),
+            address: "192.0.2.0/24,198.51.100.0/24,2001:db8::/64".into(),
+            protocol: 256,
+            ports: None,
+        };
+        let owned = OwnedRule {
+            name: spec.name.clone(),
+            rule: create_rule(&spec).unwrap(),
+        };
+        let row = rule_row(&owned).unwrap().unwrap();
+        let expected = json!({
+            "address": spec.address,
+            "protocol": spec.protocol,
+            "ports": "Any",
+            "program": spec.program,
+        });
+        assert_eq!(
+            inspection::windows_rule_keys(&row).unwrap(),
+            inspection::windows_rule_keys(&expected).unwrap()
+        );
         assert_eq!(row["sourceId"], "game-eu");
     }
 }

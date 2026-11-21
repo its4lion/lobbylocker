@@ -166,6 +166,7 @@ fn rule(protocol: Protocol, ports: Option<&str>) -> FirewallRule {
             custom: true,
         },
         program: None,
+        region: None,
     }
 }
 
@@ -308,6 +309,7 @@ fn windows_any_protocol_without_ports_stays_one_rule_and_replacements_have_uniqu
 struct StoredRule {
     group: String,
     enabled: bool,
+    keys: Option<std::collections::BTreeSet<inspection::RuleKey>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -341,6 +343,7 @@ impl FakeWindowsStore {
                     StoredRule {
                         group: group.into(),
                         enabled,
+                        keys: None,
                     },
                 )
             })
@@ -363,6 +366,7 @@ impl FakeWindowsStore {
                 Some(&StoredRule {
                     group: group.into(),
                     enabled: true,
+                    keys: None,
                 })
             );
         }
@@ -370,12 +374,19 @@ impl FakeWindowsStore {
 }
 
 impl WindowsRuleStore for FakeWindowsStore {
-    fn managed_names(&mut self) -> Result<Vec<String>> {
+    fn managed_rules(&mut self, read_filters: bool) -> Result<Vec<ManagedWindowsRule>> {
         Ok(self
             .rules
             .iter()
             .filter(|(_, rule)| rule.group == WINDOWS_GROUP)
-            .map(|(name, _)| name.clone())
+            .map(|(name, rule)| ManagedWindowsRule {
+                name: name.clone(),
+                keys: if read_filters && rule.enabled {
+                    rule.keys.clone()
+                } else {
+                    None
+                },
+            })
             .collect())
     }
 
@@ -391,6 +402,7 @@ impl WindowsRuleStore for FakeWindowsStore {
             StoredRule {
                 group: WINDOWS_GROUP.into(),
                 enabled: true,
+                keys: Some(rule.keys()?),
             },
         );
         Ok(())
@@ -416,6 +428,52 @@ fn replacement_plan() -> Vec<WindowsRuleSpec> {
 }
 
 #[test]
+fn windows_europe_batching_keeps_other_cities_when_london_is_unblocked() {
+    use crate::model::{resolve_rules_for_scope, FirewallScope, Game, Preferences};
+
+    let mut game = Game::from_json(include_bytes!("../../../../data/games/dbd.json")).unwrap();
+    game.executable_path = Some(r"C:\Games\DeadByDaylight.exe".into());
+    let games = [game];
+    let mut prefs = Preferences {
+        blocked_regions: games[0]
+            .regions
+            .iter()
+            .filter(|region| region.area == "Europe")
+            .map(|region| format!("dbd:{}", region.id))
+            .collect(),
+        ..Preferences::default()
+    };
+    let scope = FirewallScope::Executable;
+    let rules = resolve_rules_for_scope(&games, &prefs, scope).unwrap();
+    let expected = inspection::expected_keys(&rules).unwrap();
+    assert_eq!(expected.len(), 226);
+    let plan = windows_rule_plan(&Request::Apply { rules }).unwrap();
+    assert_eq!(plan.len(), 3);
+    assert_eq!(
+        plan.iter()
+            .flat_map(|rule| rule.keys().unwrap())
+            .collect::<BTreeSet<_>>(),
+        expected
+    );
+    let london = plan
+        .iter()
+        .find(|rule| rule.source_id.starts_with("dbd-eu-west-2-"))
+        .unwrap();
+    assert_eq!(london.keys().unwrap().len(), 52);
+
+    let mut store = FakeWindowsStore::existing();
+    replace_windows_rules(&mut store, &plan).unwrap();
+    store.events.clear();
+    prefs.blocked_regions.retain(|id| id != "dbd:eu-west-2");
+    let rules = resolve_rules_for_scope(&games, &prefs, scope).unwrap();
+    let plan = windows_rule_plan(&Request::Apply { rules }).unwrap();
+    replace_windows_rules(&mut store, &plan).unwrap();
+    assert_eq!(store.events, [StoreEvent::Remove(london.name.clone())]);
+    assert_eq!(store.managed_rules(false).unwrap().len(), 2);
+    store.assert_foreign_unchanged();
+}
+
+#[test]
 fn windows_replacement_creates_complete_generation_before_removing_old_rules() {
     let plan = replacement_plan();
     let mut store = FakeWindowsStore::existing();
@@ -429,7 +487,7 @@ fn windows_replacement_creates_complete_generation_before_removing_old_rules() {
             StoreEvent::Remove("old-enabled".into()),
         ]
     );
-    assert_eq!(store.managed_names().unwrap().len(), plan.len());
+    assert_eq!(store.managed_rules(false).unwrap().len(), plan.len());
     for rule in &plan {
         assert!(store.rules[&rule.name].enabled);
     }
@@ -494,7 +552,7 @@ fn windows_reset_and_empty_apply_remove_owned_rules_including_disabled_rules() {
         let plan = windows_rule_plan(&request).unwrap();
         assert!(!store.rules["old-disabled"].enabled);
         replace_windows_rules(&mut store, &plan).unwrap();
-        assert!(store.managed_names().unwrap().is_empty());
+        assert!(store.managed_rules(false).unwrap().is_empty());
         assert_eq!(store.rules.len(), 2);
         store.assert_foreign_unchanged();
     }
