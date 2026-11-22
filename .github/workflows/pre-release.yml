@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Stable version such as 0.1.0, or manual Windows hotfix such as 0.1.0-1. Empty selects the next stable version.
+        description: Optional version override (for example, 0.1.0); derived automatically when empty
         required: false
         type: string
 
@@ -18,55 +18,8 @@ permissions:
   contents: read
 
 jobs:
-  windows-hotfix:
-    name: Build and publish the manual Windows hotfix
-    if: contains(inputs.version, '-')
-    runs-on: windows-2025
-    permissions:
-      contents: write
-    env:
-      HOTFIX_VERSION: ${{ inputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.99.1
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Verify the hotfix version
-        shell: pwsh
-        run: |
-          if ($env:HOTFIX_VERSION -cnotmatch '^([0-9]+\.[0-9]+\.[0-9]+)-[1-9][0-9]*$') {
-            throw "Expected a Windows hotfix version in the form X.Y.Z-N."
-          }
-          $base = $Matches[1]
-          $metadata = cargo metadata --no-deps --locked --format-version 1 | ConvertFrom-Json
-          $app = $metadata.packages | Where-Object { $_.name -eq 'lobbylocker-app' }
-          if ($app.version -ne $base) {
-            throw "The hotfix base must match the current app version ($($app.version))."
-          }
-      - run: cargo test --locked --workspace
-      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
-      - run: cargo build --locked --release -p lobbylocker-app --bin lobbylocker-app
-      - name: Package the portable app
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path hotfix | Out-Null
-          Copy-Item target/release/lobbylocker-app.exe hotfix/
-          Copy-Item data hotfix/data -Recurse
-          Compress-Archive -Path hotfix/* -DestinationPath "LobbyLocker-${env:HOTFIX_VERSION}-Windows-x64.zip"
-      - name: Publish the manual download
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $tag = "v$env:HOTFIX_VERSION"
-          $zip = "LobbyLocker-${env:HOTFIX_VERSION}-Windows-x64.zip"
-          $notes = 'Portable Windows hotfix. Close LobbyLocker, extract the entire ZIP, then run lobbylocker-app.exe. This build uses your existing LobbyLocker settings and is distributed as a manual download.'
-          gh release create $tag $zip --target $env:GITHUB_SHA --title "LobbyLocker $env:HOTFIX_VERSION Windows hotfix" --notes $notes --prerelease --latest=false
-
   prepare:
     name: Resolve the candidate version
-    if: "!contains(inputs.version, '-')"
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
