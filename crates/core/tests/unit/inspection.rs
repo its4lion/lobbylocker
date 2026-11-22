@@ -43,6 +43,9 @@ fn windows_addresses_accept_dotted_masks_and_existing_ip_formats() {
         (" 64.224.26.0/255.255.254.0 ", "64.224.26.0/23"),
         ("2001:db8::7", "2001:db8::7/128"),
         ("2001:db8::7/64", "2001:db8::/64"),
+        ("2001:db8::7-2001:0db8::7", "2001:db8::7/128"),
+        ("2001:db8::0-2001:db8::ffff", "2001:db8::/112"),
+        ("192.0.2.0-192.0.2.255", "192.0.2.0/24"),
     ] {
         assert_eq!(
             windows_address_key(reported).unwrap(),
@@ -80,6 +83,10 @@ fn windows_addresses_reject_invalid_masks_keywords_and_unsafe_targets() {
         "127.0.0.1/255.255.255.0",
         "224.0.0.1/255.255.255.0",
         "0.0.0.0/255.255.255.255",
+        "2001:db8::1-2001:db8::3",
+        "2001:db8::3-2001:db8::0",
+        "2001:db8::1-192.0.2.1",
+        "::1-::1",
     ] {
         let error = windows_address_key(address).unwrap_err();
         assert!(error.starts_with("Could not parse address reported by Windows"));

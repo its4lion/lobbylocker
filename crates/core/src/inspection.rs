@@ -519,13 +519,25 @@ fn address_key(address: &str) -> Result<String> {
     Ok(net.to_string())
 }
 
-/// NetSecurity returns IPv4 subnets as address/dotted-mask even when Apply used
-/// numeric CIDR. Convert only at the Windows readback boundary, then retain the
-/// shared target validation and canonical key format.
+/// Windows can return dotted IPv4 masks and start-end ranges. Convert exact
+/// subnets at the readback boundary, then run the shared address validation.
 fn windows_address_key(address: &str) -> Result<String> {
     let address = address.trim();
     let parse = || -> Result<String> {
-        if let Some((ip, mask)) = address
+        if let Some((start, end)) = address.split_once('-') {
+            let start: IpAddr = start.parse().map_err(|_| "Invalid firewall range start.")?;
+            let end: IpAddr = end.parse().map_err(|_| "Invalid firewall range end.")?;
+            let prefix = match (start, end) {
+                (IpAddr::V4(a), IpAddr::V4(b)) => (u32::from(a) ^ u32::from(b)).leading_zeros(),
+                (IpAddr::V6(a), IpAddr::V6(b)) => (u128::from(a) ^ u128::from(b)).leading_zeros(),
+                _ => return Err("Firewall range mixes address families.".into()),
+            };
+            let net = ipnet::IpNet::new(start, prefix as u8).map_err(|e| e.to_string())?;
+            if net.network() != start || net.broadcast() != end {
+                return Err("Firewall range does not match an exact subnet.".into());
+            }
+            address_key(&net.to_string())
+        } else if let Some((ip, mask)) = address
             .split_once('/')
             .filter(|(_, mask)| mask.contains('.'))
         {
