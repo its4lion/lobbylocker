@@ -5,6 +5,7 @@ use crate::{
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
+    net::{IpAddr, ToSocketAddrs},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -46,8 +47,8 @@ pub fn has_official_feed(id: &str) -> bool {
 
 /// Merge bundled defaults, preserving custom data and configured probes.
 pub fn merge_defaults(game: &mut Game, defaults: Game) {
-    // Valve's live relay list takes precedence over the bundled subset.
-    if matches!(game.id.as_str(), "cs2" | "deadlock") {
+    // Live Valve relays and GameLift beacons take precedence over seed addresses.
+    if matches!(game.id.as_str(), "cs2" | "deadlock" | "dbd") {
         return;
     }
     let shipped: BTreeSet<String> = defaults
@@ -336,118 +337,163 @@ fn update_google_regions(game: &Game, body: &[u8]) -> Result<Game> {
     Ok(updated)
 }
 
-const AWS_IP_RANGES_URL: &str = "https://ip-ranges.amazonaws.com/ip-ranges.json";
+const LEGACY_DBD_SOURCE: &str = "https://ip-ranges.amazonaws.com/ip-ranges.json";
+const DBD_BEACON_SOURCE: &str =
+    "https://docs.aws.amazon.com/general/latest/gr/gamelift.html#udp-ping-beacons";
+const DBD_BEACON_NOTE: &str = "Targets the selected GameLift latency beacons on UDP port 7770. The game decides where to place a match. ICMP ping may be unavailable.";
+const DBD_BEACON_PORT: u16 = 7770;
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AwsIpRangesFeed {
-    sync_token: Option<String>,
-    prefixes: Vec<AwsIpPrefix>,
+fn is_beacon_target(endpoint: &Endpoint) -> bool {
+    endpoint.address.parse::<IpAddr>().is_ok()
+        && endpoint.protocol == Protocol::Udp
+        && crate::model::parse_ports(&endpoint.ports)
+            == Ok(Some((DBD_BEACON_PORT, DBD_BEACON_PORT)))
 }
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AwsIpPrefix {
-    ip_prefix: Option<String>,
-    region: String,
-    service: String,
+
+/// Project older saved catalogues onto the beacon targets before the engine
+/// can resolve any selections. Loading a game does not rewrite its saved file.
+pub(crate) fn migrate_dbd(game: &mut Game) -> Result<()> {
+    if game.id != "dbd" {
+        return Ok(());
+    }
+    let legacy_source = game.source.as_deref() == Some(LEGACY_DBD_SOURCE);
+    let has_broad_targets = |region: &Region| {
+        region.provider_scope.is_some()
+            && region
+                .endpoints
+                .iter()
+                .any(|endpoint| !endpoint.custom && !is_beacon_target(endpoint))
+    };
+    if !legacy_source && !game.regions.iter().any(has_broad_targets) {
+        return Ok(());
+    }
+
+    let defaults = Game::from_json(include_bytes!("../../../data/games/dbd.json"))?;
+    let needs_update = |region: &Region| {
+        if legacy_source {
+            region.provider_scope.is_some()
+                || defaults.regions.iter().any(|seed| seed.id == region.id)
+        } else {
+            has_broad_targets(region)
+        }
+    };
+    let mut reserved_ids: BTreeSet<_> = game
+        .regions
+        .iter()
+        .flat_map(|region| {
+            region
+                .endpoints
+                .iter()
+                .filter(|endpoint| endpoint.custom || !needs_update(region))
+                .map(|endpoint| endpoint.id.clone())
+        })
+        .collect();
+    for region in game
+        .regions
+        .iter_mut()
+        .filter(|region| needs_update(region))
+    {
+        let scope = region
+            .provider_scope
+            .get_or_insert_with(|| region.id.clone());
+        let addresses = defaults
+            .regions
+            .iter()
+            .find(|seed| seed.provider_scope.as_deref() == Some(scope.as_str()))
+            .into_iter()
+            .flat_map(|seed| &seed.endpoints)
+            .filter_map(|endpoint| endpoint.address.parse().ok())
+            .collect();
+        set_dbd_beacons(region, addresses, &mut reserved_ids);
+    }
+    game.source = Some(DBD_BEACON_SOURCE.into());
+    game.note = DBD_BEACON_NOTE.into();
+    game.updated_at = defaults.updated_at;
+    game.validate()
 }
 
 fn refresh_dbd(game: &Game) -> Result<Game> {
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .https_only(true)
-        .build()
-        .map_err(|e| e.to_string())?;
-    let response = client
-        .get(AWS_IP_RANGES_URL)
-        .send()
-        .map_err(|e| e.to_string())?
-        .error_for_status()
-        .map_err(|e| e.to_string())?;
-    use std::io::Read;
-    let mut body = Vec::new();
-    response
-        .take(5_000_001)
-        .read_to_end(&mut body)
-        .map_err(|e| e.to_string())?;
-    if body.len() > 5_000_000 {
-        return Err("AWS IP ranges feed is too large.".into());
-    }
-    update_aws_regions(game, &body)
+    refresh_dbd_with(game, |host| {
+        (host, DBD_BEACON_PORT)
+            .to_socket_addrs()
+            .map(|addresses| addresses.map(|address| address.ip()).collect())
+            .map_err(|error| format!("Could not resolve GameLift beacon {host}: {error}"))
+    })
 }
 
-fn update_aws_regions(game: &Game, body: &[u8]) -> Result<Game> {
+fn refresh_dbd_with(
+    game: &Game,
+    mut resolve: impl FnMut(&str) -> Result<BTreeSet<IpAddr>>,
+) -> Result<Game> {
     game.validate()?;
-    if body.len() > 5_000_000 {
-        return Err("AWS IP ranges feed is too large.".into());
-    }
-    let requested: BTreeSet<_> = game
+    let mut updated = game.clone();
+    let mut reserved_ids: BTreeSet<_> = game
         .regions
         .iter()
-        .filter_map(|r| r.provider_scope.as_deref())
+        .flat_map(|region| {
+            region
+                .endpoints
+                .iter()
+                .filter(|endpoint| endpoint.custom || region.provider_scope.is_none())
+                .map(|endpoint| endpoint.id.clone())
+        })
         .collect();
-    if requested.is_empty() {
-        return Err("No AWS region mappings configured. Add providerScope to a region in this game's JSON file.".into());
-    }
-    let feed: AwsIpRangesFeed =
-        serde_json::from_slice(body).map_err(|e| format!("Invalid AWS IP ranges feed: {e}"))?;
-    if feed.prefixes.len() > 50_000 {
-        return Err("AWS feed contains too many prefixes.".into());
-    }
-    let mut by_region: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for prefix in feed.prefixes {
-        if prefix.service != "EC2" {
-            continue;
-        }
-        let Some(address) = prefix.ip_prefix else {
-            continue;
-        };
-        if address.contains(':') {
-            continue;
-        }
-        if !requested.contains(prefix.region.as_str()) {
-            continue;
-        }
-        if !address.contains('/') {
-            continue;
-        }
-        let address = normalize_address(&address)?;
-        by_region.entry(prefix.region).or_default().insert(address);
-    }
-    for region in &requested {
-        if !by_region.contains_key(*region) || by_region[*region].is_empty() {
-            return Err(format!("AWS returned no EC2 ranges for configured region {region}. Your saved file was not changed."));
-        }
-    }
-    let mut updated = game.clone();
+    let mut resolved = BTreeMap::<String, BTreeSet<IpAddr>>::new();
     for region in &mut updated.regions {
         let Some(scope) = &region.provider_scope else {
             continue;
         };
-        let custom: Vec<_> = region
-            .endpoints
-            .iter()
-            .filter(|e| e.custom)
-            .cloned()
-            .collect();
-        region.endpoints = by_region[scope]
-            .iter()
-            .enumerate()
-            .map(|(i, address)| Endpoint {
-                id: format!("{}-{i}", region.id),
-                address: address.clone(),
-                protocol: Protocol::Any,
-                ports: None,
-                custom: false,
-            })
-            .collect();
-        region.endpoints.extend(custom);
+        if !resolved.contains_key(scope) {
+            let hostname = format!("gamelift-ping.{scope}.api.aws");
+            let mut addresses = resolve(&hostname)?;
+            addresses.retain(|address| normalize_address(&address.to_string()).is_ok());
+            if addresses.is_empty() {
+                return Err(format!(
+                    "No usable addresses for GameLift beacon {hostname}."
+                ));
+            }
+            resolved.insert(scope.clone(), addresses);
+        }
+        set_dbd_beacons(region, resolved[scope].clone(), &mut reserved_ids);
     }
-    updated.source = Some(AWS_IP_RANGES_URL.into());
-    updated.updated_at = feed.sync_token;
-    updated.note = "AWS EC2 ranges by region; shared cloud ranges can affect other apps on Linux. us-east-1 stays available because DBD backend services depend on it. Ping is an estimate; some servers may not reply.".into();
+    if resolved.is_empty() {
+        return Err("No GameLift beacon regions configured.".into());
+    }
+    updated.source = Some(DBD_BEACON_SOURCE.into());
+    updated.note = DBD_BEACON_NOTE.into();
+    if updated != *game {
+        updated.updated_at = Some(crate::now_seconds().to_string());
+    }
     updated.validate()?;
     Ok(updated)
+}
+
+fn set_dbd_beacons(
+    region: &mut Region,
+    addresses: BTreeSet<IpAddr>,
+    reserved_ids: &mut BTreeSet<String>,
+) {
+    if !region.probe_custom {
+        region.probe_target = addresses.first().map(ToString::to_string);
+    }
+    region.endpoints.retain(|endpoint| endpoint.custom);
+    let mut index = 0;
+    for address in addresses {
+        let id = loop {
+            let id = format!("{}-{index}", region.id);
+            index += 1;
+            if reserved_ids.insert(id.clone()) {
+                break id;
+            }
+        };
+        region.endpoints.push(Endpoint {
+            id,
+            address: address.to_string(),
+            protocol: Protocol::Udp,
+            ports: Some(DBD_BEACON_PORT.to_string()),
+            custom: false,
+        });
+    }
 }
 
 #[cfg(test)]

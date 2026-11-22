@@ -1,6 +1,30 @@
 //! Unit tests for the catalogue module.
 use super::*;
 
+#[test]
+fn dbd_dns_refresh_resolves_beacon_hosts_and_keeps_only_valid_udp_targets() {
+    let mut game = Game::from_json(include_bytes!("../../../../data/games/dbd.json")).unwrap();
+    game.regions.retain(|region| region.id == "eu-west-2");
+    let updated = refresh_dbd_with(&game, |host| {
+        assert_eq!(host, "gamelift-ping.eu-west-2.api.aws");
+        Ok(["203.0.113.9", "2001:db8::9", "0.0.0.0"]
+            .into_iter()
+            .map(|ip| ip.parse().unwrap())
+            .collect())
+    })
+    .unwrap();
+    let endpoints = &updated.regions[0].endpoints;
+    assert_eq!(
+        endpoints
+            .iter()
+            .map(|endpoint| endpoint.address.as_str())
+            .collect::<Vec<_>>(),
+        ["203.0.113.9", "2001:db8::9"]
+    );
+    assert!(endpoints.iter().all(is_beacon_target));
+    assert!(refresh_dbd_with(&game, |_| Ok(BTreeSet::new())).is_err());
+}
+
 fn bundled_overwatch() -> Game {
     let defaults =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/games/overwatch2.json");

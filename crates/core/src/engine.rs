@@ -412,8 +412,7 @@ impl Engine {
         if !catalogue::has_official_feed(game_id) {
             return Ok(());
         }
-        // Serialize with edits so a late response cannot overwrite them.
-        let _operation = self.operation.lock().map_err(|e| e.to_string())?;
+        let operation = self.operation.lock().map_err(|e| e.to_string())?;
         let original = match self
             .runtime()
             .snapshot
@@ -438,14 +437,30 @@ impl Engine {
                 .data_refresh_attempted_at(game_id)
                 .is_some_and(|at| now.saturating_sub(at) < DATA_REFRESH_INTERVAL_SECONDS);
         // Bundled corrections survive feed cooldowns and failures.
+        if !recent {
+            self.store.mark_data_refresh_attempted(game_id)?;
+        }
+        drop(operation);
         let fetched = if recent {
             None
         } else {
-            self.store.mark_data_refresh_attempted(game_id)?;
             catalogue::refresh(&game).ok()
         };
         let succeeded = fetched.is_some();
         let updated = fetched.unwrap_or(game);
+        let _operation = self.operation.lock().map_err(|e| e.to_string())?;
+        // The download or DNS lookup can overlap edits. Keep a newer saved
+        // catalogue, even if there is a successful but stale response.
+        if self
+            .runtime()
+            .snapshot
+            .games
+            .iter()
+            .find(|game| game.id == game_id)
+            != Some(&original)
+        {
+            return Ok(());
+        }
         if updated != original {
             self.persist_game(&updated)?;
             let mut state = self.state.lock().map_err(|e| e.to_string())?;

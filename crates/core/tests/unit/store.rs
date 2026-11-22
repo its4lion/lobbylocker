@@ -17,6 +17,73 @@ fn separate_game_files_and_no_overwrite() {
 }
 
 #[test]
+fn old_dbd_cloud_ranges_cannot_enter_a_firewall_plan_after_loading() {
+    use crate::model::{resolve_rules_for_scope, Endpoint, FirewallScope, Protocol};
+
+    let root = tempfile::tempdir().unwrap();
+    let defaults = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/games");
+    let store = Store::open(root.path().into(), &defaults).unwrap();
+    let mut game = store.default_game("dbd").unwrap();
+    game.source = Some("https://ip-ranges.amazonaws.com/ip-ranges.json".into());
+    game.regions.retain(|region| region.id == "eu-west-2");
+    let region = &mut game.regions[0];
+    let beacon_count = region.endpoints.len();
+    region.provider_scope = None;
+    region.probe_target = Some("192.0.2.7".into());
+    region.probe_custom = true;
+    let custom = Endpoint {
+        id: "eu-west-2-0".into(),
+        address: "198.51.100.7".into(),
+        protocol: Protocol::Udp,
+        ports: Some("7800".into()),
+        custom: true,
+    };
+    region.endpoints = vec![
+        custom.clone(),
+        Endpoint {
+            id: "eu-west-2-1".into(),
+            address: "203.0.113.0/24".into(),
+            protocol: Protocol::Any,
+            ports: None,
+            custom: false,
+        },
+    ];
+    store.save_game(&game).unwrap();
+    let path = store.game_path("dbd").unwrap();
+    let before = fs::read(&path).unwrap();
+    let mut saved = store
+        .snapshot()
+        .unwrap()
+        .games
+        .into_iter()
+        .find(|game| game.id == "dbd")
+        .unwrap();
+    assert_eq!(saved.regions[0].probe_target, game.regions[0].probe_target);
+    assert_eq!(
+        saved.regions[0].provider_scope.as_deref(),
+        Some("eu-west-2")
+    );
+    assert!(saved.regions[0].endpoints.contains(&custom));
+    assert_eq!(fs::read(path).unwrap(), before);
+    saved.executable_path = Some(r"C:\Games\DeadByDaylight.exe".into());
+    let prefs = Preferences {
+        blocked_regions: vec!["dbd:eu-west-2".into()],
+        ..Preferences::default()
+    };
+    let rules = resolve_rules_for_scope(&[saved], &prefs, FirewallScope::Executable).unwrap();
+    assert_eq!(rules.len(), beacon_count + 1);
+    for rule in rules.iter().filter(|rule| !rule.endpoint.custom) {
+        assert_eq!(
+            rule.program.as_deref(),
+            Some(r"C:\Games\DeadByDaylight.exe")
+        );
+        assert!(rule.endpoint.address.parse::<std::net::IpAddr>().is_ok());
+        assert_eq!(rule.endpoint.protocol, Protocol::Udp);
+        assert_eq!(rule.endpoint.ports.as_deref(), Some("7770"));
+    }
+}
+
+#[test]
 fn older_game_files_without_provider_mappings_are_not_silently_replaced() {
     let root = tempfile::tempdir().unwrap();
     let defaults = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/games");

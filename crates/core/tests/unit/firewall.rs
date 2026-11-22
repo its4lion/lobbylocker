@@ -433,6 +433,28 @@ fn windows_europe_batching_keeps_other_cities_when_london_is_unblocked() {
 
     let mut game = Game::from_json(include_bytes!("../../../../data/games/dbd.json")).unwrap();
     game.executable_path = Some(r"C:\Games\DeadByDaylight.exe".into());
+    let mut address = 1;
+    for region in game
+        .regions
+        .iter_mut()
+        .filter(|region| region.area == "Europe")
+    {
+        let count = match region.id.as_str() {
+            "eu-central-1" => 88,
+            "eu-west-1" => 86,
+            _ => 52,
+        };
+        let template = region.endpoints[0].clone();
+        region.endpoints = (0..count)
+            .map(|index| {
+                let mut endpoint = template.clone();
+                endpoint.id = format!("{}-{index}", region.id);
+                endpoint.address = format!("192.0.2.{address}");
+                address += 1;
+                endpoint
+            })
+            .collect();
+    }
     let games = [game];
     let mut prefs = Preferences {
         blocked_regions: games[0]

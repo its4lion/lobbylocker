@@ -258,7 +258,7 @@ impl Store {
             if path.extension().and_then(|e| e.to_str()) != Some("json") {
                 continue;
             }
-            let game = Game::from_json(&fs::read(&path).map_err(|e| e.to_string())?)
+            let mut game = Game::from_json(&fs::read(&path).map_err(|e| e.to_string())?)
                 .map_err(|e| format!("Invalid game file {}: {e}", path.display()))?;
             game.validate()?;
             if path.file_stem().and_then(|p| p.to_str()) != Some(game.id.as_str()) {
@@ -267,6 +267,7 @@ impl Store {
                     path.display()
                 ));
             }
+            crate::catalogue::migrate_dbd(&mut game)?;
             games.push(game);
         }
         games.sort_by_key(|g| match g.id.as_str() {
